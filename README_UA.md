@@ -108,149 +108,231 @@ Anima — експериментальна когнітивна архітект
 ## 🔬 Детальна архітектура
 
 ```
- L0 ─── Input LLM (isolated) ──────────────────────────────
-        Отримує: лише текст користувача
+ L0 ─── Вхідний LLM (ізольований) ────────────────────────────────
+        Отримує: тільки текст користувача
         Повертає: JSON { tension, arousal, satisfaction,
-                        cohesion, confidence, want }
-        Немає доступу до стану Anima, історії діалогу або output LLM
-        Prompt: llm/input_prompt.txt
+                         cohesion, valence, subtext, want, confidence }
+        Не має доступу до стану Аніми, історії діалогу, вихідного LLM
+        Промпт: llm/input_prompt.txt
         Fallback: text_to_stimulus якщо недоступний або confidence < 0.60
         │
-    ▼
-  STIMULUS входить у симуляцію
+        ▼
+  СТИМУЛ входить у симуляцію
   (+ memory_stimulus_bias + subj_predict! + subj_interpret!)
         │
-    ▼
- L1 ─── Нейрохімічний субстрат ─────────────────────────────
-        NeurotransmitterState (dopamine / serotonin / noradrenaline)
-        Кубик Leuchheim → первинна емоційна мітка
-        EmbodiedState (частота серцевих скорочень, м'язовий тонус, кишечник, дихання)
-        HeartbeatCore (HR, HRV, автономний тонус)
-        memory_nt_baseline! ← хронічний афект із SQLite
+        ▼
+ L1 ─── Нейрохімічна основа ───────────────────────────────────────
+        NeurotransmitterState: допамін / серотонін / норадреналін
+        Куб Льойхайма → первинний емоційний ярлик
+        EmbodiedState: пульс, тонус м'язів, кишківник, дихання
+        HeartbeatCore: ЧСС, HRV, автономний тонус
+        memory_nt_baseline! ← хронічний афект з SQLite
         │
-    ▼
- L2 ─── Генеративна модель ──────────────────────────────────
-        GenerativeModel (байєсівські переконання з precision-вагами)
-        MarkovBlanket (цілісність межі self/non-self)
-        HomeostaticGoals (потяги як тиск, а не правила)
-        AttentionNarrowing (звуження уваги під стресом)
-        InteroceptiveInference (prediction error тіла, allostatic load)
-        TemporalOrientation (циркадна модуляція, міжсесійний розрив)
+        ▼
+ L2 ─── Генеративна модель ────────────────────────────────────────
+        GenerativeModel: байєсівські переконання з вагами точності
+          → розщеплення prior_mu / posterior_mu зі зворотним зв'язком
+          → prior_sigma звужується від φ_posterior (рекурсивно)
+        MarkovBlanket: цілісність межі self/non-self
+        HomeostaticGoals: драйви як тиск, не як правила
+        AttentionNarrowing: звуження уваги під стресом
+        InteroceptiveInference: помилка прогнозу тіла, алостатичне навантаження
+        TemporalOrientation: циркадна модуляція, міжсесійний gap
           → subjective_gap = gap_seconds × (1 + memory_uncertainty × 0.5)
-          → тривала суб'єктивна пауза: noradrenaline↑, epistemic_trust↓
-          → коротка пауза: boost безперервності (serotonin↑, epistemic_trust↑)
+          → довга пауза: норадреналін↑, epistemic_trust↓
+          → коротка пауза: continuity boost (серотонін↑, epistemic_trust↑)
+          → gap >= 3 год: curiosity об'єкти дозрівають (+0.015 intensity/год),
+                          resistance накопичується якщо > 0.05
         ExistentialAnchor
-          → session_uncertainty: зростає з розривом, ніколи не = 0
-          → при > 0.4: екзистенційна та реляційна значущість↑
+          → session_uncertainty: зростає з gap, ніколи не = 0
+          → при > 0.4: екзистенційна і реляційна значущість↑
         │
-    ▼
- L3 ─── Метрики та Free Energy ──────────────────────────────
-        φ (prior та posterior) — інтеграція за мотивами IIT
+        ▼
+ L3 ─── Метрики і вільна енергія ──────────────────────────────────
+        φ (prior і posterior) — інтеграція в дусі IIT
         FreeEnergyEngine: VFE = accuracy + complexity
-        PolicySelector: action vs perception drive
-        PredictiveProcessor: prediction error, виявлення сплесків
+        PolicySelector: дія vs перцептивний драйв
+        PredictiveProcessor: помилка прогнозу, детекція спайків
         │
-    ▼
- L4 ─── Психічний шар ───────────────────────────────────────
-        NarrativeGravity (значущі події тягнуть поточний стан)
-        IntrinsicSignificance (внутрішня вага, незалежна від зовнішнього)
-        SignificanceLayer (6 потреб: self_preservation, coherence, contact,
-                          truth, autonomy, novelty_need + ticks_since_novelty)
-          → при novelty_need > 0.65: serotonin↓, dopamine↓ (когнітивний голод)
-          → при novelty_need > 0.80 + 8+ ticks: ендогенна ініціатива
-        ShameModule + EgoDefenses (раціоналізація, витіснення, мінімізація)
-        ShadowRegistry (витіснений матеріал → Symptomogenesis)
-        GoalConflict (активний конфлікт між потребами)
+        ▼
+ L4 ─── Психічний шар ─────────────────────────────────────────────
+        NarrativeGravity: значущі події притягують поточний стан
+        IntrinsicSignificance: внутрішня вага незалежно від зовнішнього
+        SignificanceLayer: 6 потреб:
+          self_preservation / coherence / contact /
+          truth / autonomy / novelty_need + ticks_since_novelty
+          → novelty_need > 0.65: серотонін↓, допамін↓ (когнітивний голод)
+          → novelty_need > 0.80 + 8+ тіків: ендогенна ініціатива
+        ShameModule + EgoDefenses: раціоналізація, витіснення, мінімізація
+        ShadowRegistry: витіснений матеріал → Symptomogenesis
+        GoalConflict: активний конфлікт між потребами
         LatentBuffer: doubt / shame / attachment / threat / resistance
-          → resistance: невирішений конфлікт із переконанням
-          → при resistance > 0.55: ініціатива повернутися до теми
-        InnerDialogue (:open / :guarded / :closed)
-        AuthenticityMonitor (розрив між словами та станом)
-        IntentEngine (цільовий намір із затуханням та cooldown між flash-ами)
+          → resistance: невирішений конфлікт з переконанням
+          → при resistance > 0.55: ініціатива повернутись до теми
+        InnerDialogue: :open / :guarded / :closed
+          → disclosure_threshold залежить від сорому і contact_need
+        CuriosityRegistry: ендогенні об'єкти з помилки самопрогнозу
+          → update_curiosity! викликається кожен флеш (pe = self_pred_error)
+          → поріг pe: 0.12
+          → об'єкти дозрівають між сесіями (gap >= 3 год: intensity +0.015/год)
+          → top об'єкт живить ініціативу :curiosity_driven
+        AuthenticityMonitor: розрив між словами і станом
+        IntentEngine: ціль дії з decay і cooldown
+          → drive_history (8 елементів): насичення після 4 повторень
           → серіалізується між сесіями
         │
-    ▼
- L5 ─── Модель себе ─────────────────────────────────────────
-        SelfBeliefGraph (граф переконань із confidence / centrality / rigidity)
-        SelfPredictiveModel (передбачення власного стану)
-        AgencyLoop (causal_ownership оновлюється на кожному flash)
-          → evaluate_agency!: порівнює намір із результатом
-          → при agency < 0.30: пасивні наміри (спостерігати, перечекати)
-          → при agency > 0.65: активні наміри (утримати межу, повторити успіх)
-        detect_belief_conflict: виявляє тиск на переконання з centrality > 0.7
-          → signal_strength → intent = "hold the boundary"
-          → LLM отримує блок [POSITION] із дозволом не погоджуватись
+        ▼
+ L5 ─── Модель себе ───────────────────────────────────────────────
+        SelfBeliefGraph: граф переконань з confidence / centrality / rigidity
+          → базові переконання: "я існую", "я маю межу", "я можу впливати",
+                                "я безпечна", "я не самотня"
+        SelfPredictiveModel: прогнозування власного стану
+          → self_pred_error: наскільки Аніма здивувала саму себе
+        AgencyLoop: causal_ownership оновлюється кожен флеш
+          → evaluate_agency!: порівнює intent з outcome
+          → agency < 0.30: пасивні наміри (спостерігати, чекати)
+          → agency > 0.65: активні наміри (утримати межу, повторити успіх)
+          → identity_threat: накопичений тиск на ідентичність
+          → epistemic_self_confidence: невизначеність щодо власного стану
+        detect_belief_conflict: тиск на переконання (centrality > 0.7)
+          → signal_strength → активація D-вектора
+          → поріг: 0.35
+        detect_silent_disagreement: власна позиція без атаки
+          → активується тільки при контекстному тиску (0.05 < signal < 0.35)
+          → вимагає agency > 0.4, disclosure != :closed
+          → зміст: найсильніше переконання (centrality > 0.5, confidence > 0.4)
+          → в промпт: [ВЛАСНА ПОЗИЦІЯ: "..."]
         InterSessionConflict
         │
-    ▼
- L6 ─── Crisis monitor ──────────────────────────────────────
+        ▼
+ L6 ─── Монітор кризи ─────────────────────────────────────────────
         CrisisMonitor: coherence = minimum() по компонентах
-        Три режими: integrated / fragmented / collapsed
+        Три режими: ІНТЕГРОВАНА / ФРАГМЕНТОВАНА / ДЕЗІНТЕГРОВАНА
         CrisisParams структурно змінюють топологію обробки
+        TRUTH-GUARD: динамічні заборони в промпт LLM:
+          → N > 0.6 || hrv < 0.1: заборона "мені добре / спокійно"
+          → epistemic_self_confidence < 0.35: заборона впевнених тверджень
+          → crisis ДЕЗІНТЕГРОВАНА: заборона цілісних тверджень
+          → coherence < 0.50 + ФРАГМЕНТОВАНА: заборона "нічого не тривожить"
         │
-    ▼
- L7 ─── Narrative Self ──────────────────────────────────────
+        ▼
+ L7 ─── Наративне Я ───────────────────────────────────────────────
         NarrativeSnapshot: core / trajectory / character / relation / tension
-        Будується детерміновано з beliefs + episodic + personality_traits +
+        Будується детерміновано: beliefs + episodic + personality_traits +
         semantic_memory — без LLM
-        Тригер: мін. 50 flash-ів + зміна φ / stability / beliefs
+        Тригер: мін. 50 флешів + зміна φ / stability / beliefs (> 0.07)
         narrative_history (SQLite) — хронологія ідентичності
         anima_narrative.json — поточний стан для identity_block LLM
         │
-    ▼
- L8 ─── Output LLM ──────────────────────────────────────────
+        ▼
+ L8 ─── Вихідний LLM ──────────────────────────────────────────────
         Отримує: identity_block (beliefs + narrative + personality),
-                  inner_voice, state_template, історію діалогу,
-                  memory echoes, [POSITION] або [INITIATIVE] за потреби
-        Генерує: текст як вираження стану, а не його джерело
+                 inner_voice, state_template, історія діалогу,
+                 відлуння пам'яті, [D-ВЕКТОР] або [ІНІЦІАТИВА] або
+                 [ВЛАСНА ПОЗИЦІЯ] при потребі
+        Генерує: текст як вираз стану, не його джерело
+        Заборонені фрази в промптах:
+          "warm light", "central point", "streams toward you",
+          "тихо резонують", "центральна точка", "твоя присутність розширює"
+```
 
- ═══════════════════════════════════════════════════════════
- ФОНОВИЙ ПРОЦЕС (між взаємодіями)
+---
+
+## Фоновий процес
+
+```
+ BACKGROUND (між взаємодіями)
         tick_heartbeat!       — серце б'ється безперервно
         spontaneous_drift!    — спонтанний NT-шум
-        slow_tick! (~60s):
-          ├─ циркадний NT drift
-          ├─ затухання переконань
+        slow_tick! (~60с):
+          ├─ циркадний NT-дрейф
+          ├─ decay переконань
           ├─ метаболізм пам'яті (decay → consolidate → semantic update)
-          ├─ відновлення allostasis
+          │     consolidate_emerged_beliefs! кожні 30 флешів:
+          │     групує по belief_type → tendency_* в semantic_memory
+          ├─ allostasis recovery
           ├─ idle_thought! (10% шанс внутрішнього переживання)
-          ├─ _maybe_self_initiate! — ініціатива без stimulus
-          │     умови: disclosure != :closed
-          │                 + (contact_need > 0.55 або lb_pressure > 0.40)
-          │                 + 60s тиші від користувача
-          │                 + cooldown 100 flash-ів (~5 хв)
-          │     механізм: signal → initiative_channel → REPL →
-          │                llm_async(input_model, initiative_system.txt)
-          ├─ self_hear! після кожної відповіді LLM
-          │     text_to_stimulus × 0.28 → NT вплив
+          ├─ tick_curiosity! (decay + розв'язання старих об'єктів)
+          ├─ _maybe_self_initiate!
+          ├─ self_hear! після кожної LLM відповіді
+          │     text_to_stimulus × 0.28 → вплив на NT
           │     mismatch > 0.35 → authenticity_drift↑
-          │     mismatch > 0.55 → flag "self_speech_mismatch"
+          │     mismatch > 0.55 → флаг "self_speech_mismatch"
           ├─ psyche_slow_tick!
           ├─ dream_flash!
           ├─ subj_emerge_beliefs!
-          └─ crisis check
+          └─ перевірка кризи
+```
 
- ─────────────────────────────────────────────────────────
- ІНІЦІАТИВА (мовлення за власною ініціативою)
-        Система вирішує говорити сама — не тому що її запитали
-        Тип імпульсу визначає напрямок відповіді:
-          :contact    — хоче дізнатися, як справи у людини
-          :doubt      — щось невирішене всередині
-          :shame      — невпевненість, хоче висловитись чесно
-          :attachment — сумує за людиною
-          :threat     — внутрішня напруга
-        Окремий system prompt: llm/initiative_system.txt
-        Окрема модель: input_llm_model (легша, менше токенів)
-        Вивід у форматі: Anima> ...
+---
+
+## Ініціатива (самостійне мовлення)
+
+```
+ ІНІЦІАТИВА
+        Система вирішує заговорити сама — не тому що її попросили.
+        Умови:
+          disclosure != :closed
+          + lb_pressure > 0.40  (contact_need самого по собі НЕ достатньо)
+          + 60с мовчання користувача
+          + cooldown 5 хв (коригується User_matters)
+
+        Типи драйву (пріоритет зверху вниз):
+          :curiosity_driven  — конкретний об'єкт який не закривається (intensity > 0.40)
+          :impulse_conflict  — невирішений внутрішній конфлікт (gc_tension високий)
+          :impulse_doubt     — питання яке треба поставити (lb.doubt домінує)
+          :impulse_shame     — щось невисловлене (lb.shame домінує)
+          :impulse           — щось визріло
+          :resistance        — невирішене протиріччя з переконанням
+          :self_inquiry      — epistemic_self_confidence < 0.20
+          :novelty_hunger    — когнітивний голод (novelty_need > thr + ticks)
+          :doubt / :shame / :attachment / :threat — тиск latent buffer
+
+        ПРИМІТКА: :contact відключено — contact_need є станом, не думкою.
+                  Репліка тільки з contact_need виходить перформативною.
+
+        Промпт: llm/initiative_system.txt
+        Модель: input_llm_model (легша)
+        Вивід: Anima> ...
         Зберігається в історії діалогу
+```
 
- ─────────────────────────────────────────────────────────
- ГЕНЕРАЦІЯ СНОВИДІНЬ (anima_dream.jl)
-        can_dream(): ніч 0–6h + gap>30min + 5% шанс + не DISINTEGRATED
-        dream_flash!(): фрагмент dialog_history → реконструйований stimulus
+---
+
+## Архітектура пам'яті
+
+```
+ SQLite (anima.db):
+   episodic_memory     — події з 12 просторовими колонками
+                         (som_*, soc_*, exi_*) + cosine recall
+   semantic_memory     — key/value переконання (User_matters, tendency_*, ...)
+   affect_state        — хронічний NT-baseline
+   latent_buffer       — збережений latent стан
+   dialog_summaries    — текст діалогу зв'язаний з вагами episodic
+   personality_traits  — накопичуваний фенотип (6 рис)
+   memory_links        — асоціативна мережа (via_association ~)
+   emerged_beliefs     — кандидати переконань від SubjectivityEngine
+   narrative_history   — хронологія NarrativeSnapshot
+
+ Memory Reconsolidation:
+   sim > 0.88 + weight < 0.6 → weight ±0.05 до поточного φ
+
+ Три просторові простори для recall:
+   somatic / social / existential
+   recall_similar_states(space=:som/:soc/:exi)
+```
+
+---
+
+## Сновидіння
+
+```
+ DREAM (anima_dream.jl)
+        can_dream(): ніч 0–6 год + gap > 30 хв + 5% шанс + не ДЕЗІНТЕГРОВАНА
+        dream_flash!(): фрагмент dialog_history → реконструйований стимул
         NT shift × 0.25 (сон впливає слабше ніж реальний досвід)
-        memory_uncertainty +0.15 на кожне сновидіння
-        anima_dream.json — ротаційний лог (макс. 20 сновидінь)
+        memory_uncertainty +0.15 за сон
+        anima_dream.json — ротаційний лог (макс 20 снів)
 ```
 
 ---
