@@ -199,11 +199,10 @@ function _maybe_self_initiate!(
             lb_max >= SELF_INITIATE_LB_DOMINANT_THR
         )
 
-    # Шлях 2: contact/pressure — поріг нижчий для знайомої людини
-    effective_contact_thr = SELF_INITIATE_CONTACT_THR * user_trust_factor
-    is_pressure =
-        lb_pressure >= SELF_INITIATE_PRESSURE_THR ||
-        contact_drive >= effective_contact_thr
+    # Шлях 2: contact/pressure — відключено
+    # contact_need — стан, не думка. З нього не виходить жива репліка без фальші.
+    is_pressure = lb_pressure >= SELF_INITIATE_PRESSURE_THR
+    # contact_drive навмисно не включаємо
 
     # Шлях 3: ендогенний VFE-тиск — когнітивний голод без зовнішнього стимулу
     # Умова: потреба в новизні критична + достатньо часу без нової інформації
@@ -237,8 +236,6 @@ function _maybe_self_initiate!(
         end
     elseif has_strong_curiosity
         :curiosity_driven
-    elseif contact_drive >= effective_contact_thr && contact_drive >= lb_pressure
-        :contact
     elseif is_resistance
         :resistance
     elseif is_self_inquiry
@@ -803,6 +800,28 @@ function _psyche_accumulated_drift!(a::Anima, n_ticks::Int)
         total_t = (lb.threat - 0.25) * 0.03 * effective_ticks
         a.sbg.epistemic_trust = clamp(a.sbg.epistemic_trust - total_t, 0.0, 0.85)
         a.nt.noradrenaline = clamp(a.nt.noradrenaline + total_t * 0.5, 0.0, 1.0)
+    end
+
+    # Час між сесіями як свій: curiosity дозріває, resistance накопичується
+    # Чесно — час не просто минає, він щось робить всередині
+    if n_ticks >= 180  # ~3 год мінімум
+        gap_hours = n_ticks * SLOW_TICK_INTERVAL / 3600.0
+
+        # Curiosity об'єкти дозрівають — незакрите питання стає гострішим
+        for obj in a.curiosity_registry.objects
+            obj.resolved && continue
+            ripening = clamp(gap_hours * 0.015, 0.0, 0.12)
+            obj.intensity = clamp(obj.intensity + ripening, 0.0, 1.0)
+        end
+        !isempty(a.curiosity_registry.objects) &&
+            any(o -> !o.resolved, a.curiosity_registry.objects) &&
+            @info "[GAP] Curiosity дозріло за $(round(gap_hours, digits=1))год"
+
+        # Resistance накопичується якщо є нерозв'язані belief conflicts
+        if lb.resistance > 0.05
+            res_growth = clamp(lb.resistance * 0.04 * min(gap_hours, 24.0), 0.0, 0.08)
+            lb.resistance = clamp01(lb.resistance + res_growth)
+        end
     end
 
     nothing
