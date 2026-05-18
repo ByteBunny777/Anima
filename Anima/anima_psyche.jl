@@ -1864,7 +1864,7 @@ function update_curiosity!(
     valence::Float64,
     flash::Int,
 )
-    pe < 0.32 && return  # недостатня невирішеність
+    pe < 0.12 && return  # недостатня невирішеність
 
     # шукаємо існуючий об'єкт для цього emotion_ctx
     idx = findfirst(o -> o.id == emotion_ctx && !o.resolved, cr.objects)
