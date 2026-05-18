@@ -974,3 +974,48 @@ function detect_belief_conflict(sbg::SelfBeliefGraph, user_msg::String)
         is_identity_attack = has_identity_attack,
     )
 end
+
+"""
+    detect_silent_disagreement(sbg, narrative_core, agency, disclosure_mode,
+                               identity_threat, belief_conflict_strength) -> Union{Nothing, NamedTuple}
+
+Тиха незгода — є тільки коли є контекстна напруга: слабкий тиск на ідентичність
+або переконання під легким тиском (але ще не D-вектор).
+Без тиску — nothing. Позиція без причини — не незгода, а шум.
+"""
+function detect_silent_disagreement(
+    sbg::SelfBeliefGraph,
+    narrative_core::String,
+    agency::Float64,
+    disclosure_mode::Symbol,
+    identity_threat::Float64,
+    belief_conflict_strength::Float64,
+)
+    # Базові умови
+    (agency < 0.4 || disclosure_mode == :closed) && return nothing
+
+    # Потрібна контекстна напруга: слабкий тиск є але D-вектор ще не активний
+    # D-вектор бере над 0.35 — тут працюємо з 0.05..0.34
+    has_pressure = (belief_conflict_strength > 0.05 && belief_conflict_strength < 0.35) ||
+                   (identity_threat > 0.05 && identity_threat < 0.35)
+    has_pressure || return nothing
+
+    # Шукаємо переконання під тиском (centrality > 0.5)
+    candidates = sort(
+        [
+            (name, b) for
+            (name, b) in sbg.beliefs if b.centrality > 0.5 && b.confidence > 0.4
+        ],
+        by = x -> -(x[2].centrality * x[2].confidence),
+    )
+
+    isempty(candidates) && return nothing
+    top_name, top_b = first(candidates)
+    belief_strength = top_b.centrality * top_b.confidence
+
+    (
+        source   = :belief,
+        content  = top_name,
+        strength = round(belief_strength, digits = 3),
+    )
+end
