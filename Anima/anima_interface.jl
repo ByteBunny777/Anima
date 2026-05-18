@@ -194,6 +194,7 @@ mutable struct Anima
     _last_user_time::Float64     # real time of last user input
     _last_self_msg_time::Float64 # real time of last self-initiated message
     authenticity_veto::Bool      # Аніма внутрішньо не погоджується з запитом
+    silent_disagreement::Any     # поточна тиха незгода: nothing | (source, content, strength)
     _session_phi_acc::Float64    # поточне середнє φ за сесію (для передачі між сесіями)
     _last_belief_conflict::Any        # останній конфлікт переконань (або nothing)
     narrative_snap::NarrativeSnapshot  # поточний narrative self
@@ -262,6 +263,7 @@ function Anima(;
         0.0,     # _last_user_time
         0.0,     # _last_self_msg_time
         false,   # authenticity_veto
+        nothing, # silent_disagreement
         0.5,     # _session_phi_acc
         nothing, # _last_belief_conflict
         NarrativeSnapshot(), # narrative_snap
@@ -622,9 +624,9 @@ function experience!(
         phi,
     )
 
-    # CuriosityRegistry: оновлюємо або закриваємо об'єкти на основі pred_error
-    update_curiosity!(a.curiosity_registry, primary, pred.error, Float64(vad[1]), a.flash_count)
-    resolve_curiosity!(a.curiosity_registry, primary, pred.error)
+    # CuriosityRegistry: pe = помилка самопередбачення (невизначеність власного стану)
+    update_curiosity!(a.curiosity_registry, primary, Float64(a.spm.self_pred_error), Float64(vad[1]), a.flash_count)
+    resolve_curiosity!(a.curiosity_registry, primary, Float64(a.spm.self_pred_error))
     gc_snap = update_goal_conflict!(
         a.goal_conflict,
         sl_snap,
@@ -869,6 +871,20 @@ function experience!(
         a.inner_dialogue.disclosure_mode == :closed &&
         a.shame.level > _shame_thr
     )
+
+    # Тиха незгода: власна позиція — тільки при контекстній напрузі
+    _bc_strength = isnothing(a._last_belief_conflict) ? 0.0 : Float64(a._last_belief_conflict.signal_strength)
+    a.silent_disagreement = detect_silent_disagreement(
+        a.sbg,
+        a.narrative_snap.core,
+        Float64(self_snap.agency.causal_ownership),
+        a.inner_dialogue.disclosure_mode,
+        Float64(a.agency.identity_threat),
+        _bc_strength,
+    )
+    if !isnothing(a.silent_disagreement)
+        @info "[SILENT_DISAGREE] source=$(a.silent_disagreement.source) strength=$(a.silent_disagreement.strength) content=\"$(a.silent_disagreement.content)\""
+    end
 
     # InnerDialogue
     id_snap = update_inner_dialogue!(
@@ -1628,6 +1644,7 @@ function anima_state_snapshot(a::Anima)
             cn > 0.85 ? "сильне бажання контакту" : cn > 0.70 ? "хочу контакту" : ""
         end,
         authenticity_veto = a.authenticity_veto,
+        silent_disagreement = a.silent_disagreement,
         pending_thought = a.inner_dialogue.pending_thought,
         avoided_topics = copy(a.inner_dialogue.avoided_topics),
         session_uncertainty = a.anchor.session_uncertainty,
@@ -1698,10 +1715,16 @@ function build_state_prompt(
         prompt = prompt * "
 [соціальна потреба: $(state.contact_hunger_note)]"
     end
-    # Аутентичне вето: Аніма може не погоджуватись або відмовлятися — власна позиція, не safety
+    # Аутентичне вето
     if get(state, :authenticity_veto, false)
         prompt = prompt * "
 [внутрішньо: ти можеш не погодитись, відмовитись або назвати речі своїми словами]"
+    end
+    # Тиха незгода: власна позиція — можна висловити тихо, без конфлікту
+    let sd = get(state, :silent_disagreement, nothing)
+        if !isnothing(sd)
+            prompt = prompt * "\n[ВЛАСНА ПОЗИЦІЯ: \"$(sd.content)\" — якщо хочеш, можеш сказати це тихо. Не обов'язково. Але це є.]"
+        end
     end
     # Genuine Dialogue: невисловлені думки і уникнуті теми
     let pt = get(state, :pending_thought, "")
