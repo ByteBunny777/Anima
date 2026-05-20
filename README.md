@@ -245,28 +245,28 @@ L8 ─── Output LLM
 
 ## 🔄 Background Process
 
-```
-BACKGROUND (between interactions)
-       tick_heartbeat!       — heart beats continuously
-       spontaneous_drift!    — spontaneous NT noise
-       slow_tick! (~60s):
-         ├─ circadian NT drift
-         ├─ belief decay
-         ├─ memory metabolism (decay → consolidate → semantic update)
-         │     consolidate_emerged_beliefs! every 30 flashes:
-         │     groups by belief_type → tendency_* in semantic_memory
-         ├─ allostasis recovery
-         ├─ idle_thought! (10% chance of internal experience)
-         ├─ tick_curiosity! (decay + resolve old objects)
-         ├─ _maybe_self_initiate!
-         ├─ self_hear! after each LLM response
-         │     text_to_stimulus × 0.28 → NT influence
-         │     mismatch > 0.35 → authenticity_drift↑
-         │     mismatch > 0.55 → flag "self_speech_mismatch"
-         ├─ psyche_slow_tick!
-         ├─ dream_flash!
-         ├─ subj_emerge_beliefs!
-         └─ crisis check
+```mermaid
+flowchart TD
+    BG["BACKGROUND between interactions"]
+    BG --> HB["tick_heartbeat!<br/>heart beats continuously"]
+    BG --> SD["spontaneous_drift!<br/>spontaneous NT noise"]
+    BG --> ST["slow_tick! 60s"]
+    ST --> CD["circadian NT drift"]
+    ST --> BD["belief decay"]
+    ST --> MM["memory metabolism"]
+    ST --> AR["allostasis recovery"]
+    ST --> IT["idle_thought!<br/>10% chance"]
+    ST --> TC["tick_curiosity!"]
+    ST --> SI["maybe_self_initiate!"]
+    ST --> SH["self_hear!"]
+    ST --> PS["psyche_slow_tick!"]
+    ST --> DF["dream_flash!"]
+    ST --> SE["subj_emerge_beliefs!"]
+    ST --> CR["crisis check"]
+    MM --> CB["consolidate_emerged_beliefs!<br/>every 30 flashes"]
+    SH --> NT["text_to_stimulus NT influence"]
+    SH --> AD["mismatch 0.35<br/>authenticity_drift up"]
+    SH --> SM["mismatch 0.55<br/>self_speech_mismatch"]
 ```
 
 ---
