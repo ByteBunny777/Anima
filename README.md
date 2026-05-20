@@ -112,7 +112,7 @@ Recent updates, in brief:
 
 ## 🔬 Detailed architecture
 
-```yaml
+```julia
  L0 ─── Input LLM (isolated) ──────────────────────────────────────
         Receives: user text only
         Returns: JSON { tension, arousal, satisfaction,
