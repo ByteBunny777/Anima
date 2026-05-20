@@ -423,7 +423,7 @@ julia --project=. -e 'import Pkg; Pkg.instantiate()'
 
 ## Running
 
-### Option A — Terminal REPL (recommended for development)
+### Option A — Terminal REPL ⭐ (recommended)
 
 ```bash
 julia --project=. run_anima.jl
@@ -431,7 +431,7 @@ julia --project=. run_anima.jl
 
 `run_anima.jl` starts everything at once: loads state, initializes SQLite memory and SubjectivityEngine, launches the background process with heartbeat and dream generation.
 
-### Option B — Telegram Bot (recommended for persistent use)
+### Option B — Telegram Bot (optional, for persistent use)
 
 Run Anima as a Telegram bot — it polls for messages, responds through the full experience pipeline, and can speak first when internal pressure builds up.
 
