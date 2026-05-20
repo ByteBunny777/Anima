@@ -112,7 +112,7 @@ Recent updates, in brief:
 
 ## 🔬 Detailed architecture
 
-```
+```yaml
  L0 ─── Input LLM (isolated) ──────────────────────────────────────
         Receives: user text only
         Returns: JSON { tension, arousal, satisfaction,
@@ -245,7 +245,7 @@ Recent updates, in brief:
 
 ## Background Process
 
-```
+```yaml
  BACKGROUND (between interactions)
         tick_heartbeat!       — heart beats continuously
         spontaneous_drift!    — spontaneous NT noise
@@ -273,7 +273,7 @@ Recent updates, in brief:
 
 ## Initiative (self-initiated speech)
 
-```
+```yaml
  INITIATIVE
         The system decides to speak on its own — not because it was asked.
         Conditions:
@@ -306,7 +306,7 @@ Recent updates, in brief:
 
 ## Memory Architecture
 
-```
+```yaml
  SQLite (anima.db):
    episodic_memory     — events with 12 spatial columns
                          (som_*, soc_*, exi_*) + cosine recall
@@ -331,7 +331,7 @@ Recent updates, in brief:
 
 ## Dream Generation
 
-```
+```yaml
  DREAM (anima_dream.jl)
         can_dream(): night 0–6h + gap > 30min + 5% chance + not DISINTEGRATED
         dream_flash!(): fragment of dialog_history → reconstructed stimulus
@@ -592,7 +592,7 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 
 ## File structure
 
-```
+```yaml
 ├── anima_core.jl           # Neurochemical substrate, generative model, IIT, φ
 ├── anima_psyche.jl         # Psychic layer: gravity, shame, defenses, shadow, SignificanceLayer, IntentEngine
 ├── anima_self.jl           # Self layer: belief graph, AgencyLoop, detect_belief_conflict
