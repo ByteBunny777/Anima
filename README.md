@@ -245,7 +245,7 @@ Recent updates, in brief:
 
 ## Background Process
 
-```mermaid
+```
  BACKGROUND (between interactions)
         tick_heartbeat!       — heart beats continuously
         spontaneous_drift!    — spontaneous NT noise
