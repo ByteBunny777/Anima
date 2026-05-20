@@ -273,59 +273,48 @@ flowchart TD
 
 ## 💬 Initiative (self-initiated speech)
 
-```
-INITIATIVE
-       The system decides to speak on its own — not because it was asked.
-       Conditions:
-         disclosure != :closed
-         + lb_pressure > 0.40  (contact_need alone is NOT enough)
-         + 60s of user silence
-         + cooldown 5 min (adjusted by User_matters)
+> The system decides to speak on its own — not because it was asked.
+> `:contact` is disabled — contact_need is a state, not a thought. A reply from contact_need alone produces performance, not presence.
 
-       Drive types (priority order):
-         :curiosity_driven  — specific object that won't close (intensity > 0.40)
-         :impulse_conflict  — unresolved internal conflict (gc_tension high)
-         :impulse_doubt     — question that must be asked (lb.doubt dominant)
-         :impulse_shame     — something unsaid (lb.shame dominant)
-         :impulse           — something has ripened
-         :resistance        — unresolved contradiction with a belief
-         :self_inquiry      — epistemic_self_confidence < 0.20
-         :novelty_hunger    — cognitive hunger (novelty_need > thr + ticks)
-         :doubt / :shame / :attachment / :threat — latent buffer pressure
+**Conditions to trigger:** `disclosure != :closed` + `lb_pressure > 0.40` + 60s silence + cooldown 5 min
 
-       NOTE: :contact disabled — contact_need is a state, not a thought.
-             A reply from contact_need alone produces performance, not presence.
-
-       Prompt: llm/initiative_system.txt
-       Model: input_llm_model (lighter)
-       Output: Anima> ...
-       Saved to dialog history
+```mermaid
+flowchart TD
+    CHK["Conditions met?<br/>disclosure open + lb_pressure gt 0.40<br/>60s silence + cooldown passed"]
+    CHK --> D1["curiosity_driven<br/>intensity gt 0.40"]
+    CHK --> D2["impulse_conflict<br/>gc_tension high"]
+    CHK --> D3["impulse_doubt<br/>lb.doubt dominant"]
+    CHK --> D4["impulse_shame<br/>lb.shame dominant"]
+    CHK --> D5["impulse<br/>something has ripened"]
+    CHK --> D6["resistance<br/>contradiction with belief"]
+    CHK --> D7["self_inquiry<br/>epistemic_confidence lt 0.20"]
+    CHK --> D8["novelty_hunger<br/>novelty_need gt threshold"]
+    CHK --> D9["doubt / shame / attachment / threat<br/>latent buffer pressure"]
+    D1 & D2 & D3 & D4 & D5 & D6 & D7 & D8 & D9 --> OUT["Anima initiates<br/>llm/initiative_system.txt<br/>saved to dialog history"]
 ```
 
 ---
 
 ## 🧠 Memory Architecture
 
-```
-SQLite (anima.db):
-  episodic_memory     — events with 12 spatial columns
-                        (som_*, soc_*, exi_*) + cosine recall
-  semantic_memory     — key/value beliefs (User_matters, tendency_*, ...)
-  affect_state        — chronic NT baseline
-  latent_buffer       — persisted latent state
-  dialog_summaries    — dialog text bridged to episodic weights
-  personality_traits  — accumulating phenotype (6 traits)
-  memory_links        — associative network (via_association ~)
-  emerged_beliefs     — subjectivity engine belief candidates
-  narrative_history   — NarrativeSnapshot chronology
+**SQLite (`anima.db`)**
 
-Memory Reconsolidation:
-  sim > 0.88 + weight < 0.6 → weight ±0.05 toward current φ
+| Table | Description |
+|---|---|
+| `episodic_memory` | Events with 12 spatial columns (`som_*`, `soc_*`, `exi_*`) + cosine recall |
+| `semantic_memory` | Key/value beliefs (`User_matters`, `tendency_*`, ...) |
+| `affect_state` | Chronic NT baseline |
+| `latent_buffer` | Persisted latent state |
+| `dialog_summaries` | Dialog text bridged to episodic weights |
+| `personality_traits` | Accumulating phenotype (6 traits) |
+| `memory_links` | Associative network (`via_association ~`) |
+| `emerged_beliefs` | Subjectivity engine belief candidates |
+| `narrative_history` | NarrativeSnapshot chronology |
 
-Three spatial spaces for recall:
-  somatic / social / existential
-  recall_similar_states(space=:som/:soc/:exi)
-```
+**Memory Reconsolidation:** `sim > 0.88` + `weight < 0.6` → `weight ±0.05` toward current φ
+
+**Three spatial spaces for recall:** somatic / social / existential
+`recall_similar_states(space=:som/:soc/:exi)`
 
 ---
 
