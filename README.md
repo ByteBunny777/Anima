@@ -4,6 +4,14 @@
 ![RAM](https://img.shields.io/badge/RAM-16GB-orange?style=flat-square)
 ![License](https://img.shields.io/badge/License-Non--Commercial-red?style=flat-square)
 
+<style>
+  body { background-color: #0d1117 !important; color: #c9d1d9 !important; }
+  h1, h2, h3, h4, h5, h6 { color: #f0f6fc !important; border-bottom-color: #21262d !important; }
+  code { background-color: #161b22 !important; color: #ff7b72 !important; }
+  pre { background-color: #161b22 !important; border: 1px solid #30363d !important; }
+  a { color: #58a6ff !important; }
+</style>
+
 # Anima — Internal State Architecture 🌀
 
 Anima is an experimental cognitive architecture that models internal state, conflicts, and decision-making — rather than simply generating responses through an LLM.
