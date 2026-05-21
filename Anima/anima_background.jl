@@ -302,6 +302,7 @@ function _maybe_self_initiate!(
     # Після ініціативи скидаємо відповідний лічильник
     if dominant_type == :novelty_hunger
         a.sig_layer.ticks_since_novelty = 0
+        a.boredom = max(0.0, a.boredom - 0.3)
     elseif dominant_type == :curiosity_driven
         # знижуємо intensity щоб не повторювати те саме питання одразу
         if !isnothing(_top_co)
@@ -393,7 +394,33 @@ function psyche_slow_tick!(a::Anima)
         a.nt.dopamine = clamp(a.nt.dopamine - valence_drift * 0.5, 0.0, 1.0)
     end
 
+    # Нудьга: система шукає новизну але не знаходить.
+    # Виростає при novelty_need + тривалій відсутності стимулів + низькому arousal.
+    # Не те саме що novelty_need — це вже накопичений стан, не просто голод.
+    let
+        novelty_pressure = clamp01((sl.novelty_need - 0.40) / 0.60)
+        time_factor = clamp01(sl.ticks_since_novelty / 120.0)
+        low_arousal = clamp01(1.0 - a.nt.noradrenaline / 0.5)
+        boredom_signal = novelty_pressure * time_factor * low_arousal
+        # повільне наростання, швидший decay (decay відбувається при новому стимулі)
+        a.boredom = clamp01(a.boredom * 0.995 + boredom_signal * 0.012)
+    end
+
+    # Ефект нудьги на систему
+    if a.boredom > 0.5
+        # знижений допамін — система менш мотивована
+        a.nt.dopamine = clamp(a.nt.dopamine - (a.boredom - 0.5) * 0.006, 0.0, 1.0)
+    end
+    if a.boredom > 0.7
+        # при глибокій нудьзі — curiosity об'єкти дозрівають швидше
+        # (система стає готовішою чіплятись за будь-яку новизну)
+        for obj in a.curiosity_registry.objects
+            !obj.resolved && (obj.intensity = clamp01(obj.intensity + 0.004))
+        end
+    end
+
     tick_curiosity!(a.curiosity_registry, a.flash_count)
+    tick_aesthetic!(a.aesthetic_sense, a.flash_count)
     a.goal_conflict.tension = max(0.0, a.goal_conflict.tension - 0.008)
     if a.goal_conflict.tension < 0.05
         a.goal_conflict.resolution = "none"
@@ -897,6 +924,7 @@ function background_save!(a::Anima)
         "shadow_registry" => sr_to_json(a.shadow_registry),
         "inner_dialogue" => id_to_json(a.inner_dialogue),
         "curiosity_registry" => cr_to_json(a.curiosity_registry),
+        "aesthetic_sense" => as_to_json(a.aesthetic_sense),
     )
     open(_tmp_psyche, "w") do f
         ;
@@ -1570,6 +1598,7 @@ $(dominant_note)"""
                 a._last_user_flash = a.flash_count
                 a._last_user_time = time()
                 a.sig_layer.ticks_since_novelty = 0   # новий зовнішній стимул — голод скидається
+                a.boredom = max(0.0, a.boredom - 0.25) # контакт частково знімає нудьгу
                 r = experience!(a, stim; user_message = cmd, mem = mem)
                 dialog_to_belief_signal!(a.sbg, cmd, a.flash_count)
                 # Genuine Dialogue: детекція уникнутих тем
