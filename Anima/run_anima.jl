@@ -13,6 +13,16 @@ anima = Anima()
 mem   = MemoryDB()
 subj  = SubjectivityEngine(mem)
 
+atexit(() -> begin
+    try
+        save!(anima)
+        close_memory!(mem; sbg = anima.sbg, crisis_mode = string(anima.crisis.mode), flash = anima.flash_count)
+        println("  [EXIT] Стан збережено.")
+    catch e
+        @warn "[EXIT] Помилка збереження: $e"
+    end
+end)
+
 repl_with_background!(
     anima;
     mem = mem,
