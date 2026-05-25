@@ -525,6 +525,7 @@ function slow_tick!(
     if !isnothing(mem)
         try
             _memory_decay!(mem)
+            _dissolve_to_semantic!(mem)   # дистиляція перед видаленням
             _memory_prune!(mem)
             _memory_consolidate!(mem)
             _refresh_cache!(mem)
@@ -858,6 +859,7 @@ end
 
 function atomic_write(path::String, data)
     tmp = path * ".tmp"
+    mkpath(dirname(tmp))
     open(tmp, "w") do f
         ;
         JSON3.write(f, data);
@@ -925,6 +927,7 @@ function background_save!(a::Anima)
         "inner_dialogue" => id_to_json(a.inner_dialogue),
         "curiosity_registry" => cr_to_json(a.curiosity_registry),
         "aesthetic_sense" => as_to_json(a.aesthetic_sense),
+        "attention_focus" => af_to_json(a.attention_focus),
     )
     open(_tmp_psyche, "w") do f
         ;
@@ -1125,6 +1128,30 @@ function repl_with_background!(
                 a.sbg.epistemic_trust =
                     clamp(a.sbg.epistemic_trust + continuity * 0.08, 0.0, 1.0)
                 a.nt.serotonin = clamp(a.nt.serotonin + continuity * 0.05, 0.0, 1.0)
+            end
+        end
+    end
+
+    # Слід останнього сну при пробудженні
+    # nt_delta вже містить DREAM_NT_SCALE×0.25 з моменту сну.
+    # При старті застосовуємо ×0.5 — залишковий відбиток, слабший ніж сам сон.
+    let dream_log = load_dream_log()
+        if !isempty(dream_log) && a.temporal.gap_seconds >= DREAM_GAP_MIN
+            last_dream = dream_log[end]
+            raw_delta = get(last_dream, "nt_delta", nothing)
+            if !isnothing(raw_delta) && length(raw_delta) == 3
+                try
+                    dd = Float64(raw_delta[1]) * 0.5
+                    sd = Float64(raw_delta[2]) * 0.5
+                    nd = Float64(raw_delta[3]) * 0.5
+                    a.nt.dopamine      = clamp01(a.nt.dopamine      + dd)
+                    a.nt.serotonin     = clamp01(a.nt.serotonin     + sd)
+                    a.nt.noradrenaline = clamp01(a.nt.noradrenaline + nd)
+                    update_from_nt!(a.body, a.nt)
+                    println("  [DREAM] Слід сну: ΔD=$(round(dd,digits=3)) ΔS=$(round(sd,digits=3)) ΔN=$(round(nd,digits=3))")
+                catch e
+                    @warn "[DREAM] Не вдалось застосувати слід сну: $e"
+                end
             end
         end
     end
