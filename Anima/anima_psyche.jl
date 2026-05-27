@@ -702,7 +702,7 @@ function update_significance!(
     emotion in ("Любов", "Довіра", "Захоплення") ?
     (is.relational=clamp01(is.relational+intensity*0.08)) :
     (is.relational=max(0.1, is.relational-0.005))
-    is.existential=clamp01(0.05+sk*0.5+flash*0.002+phi*0.1)
+    is.existential=clamp01(0.05+sk*0.5+log1p(flash)*0.02+phi*0.1)
     k=safe_first(emotion, 10)
     is.sig_map[k]=round(get(is.sig_map, k, 0.5)*0.8+intensity*0.2, digits = 3)
     vs=collect(values(is.sig_map))
