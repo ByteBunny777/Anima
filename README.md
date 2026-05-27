@@ -214,6 +214,8 @@ L5 ─── Self model
          → agency > 0.65: active intents (hold boundary, repeat success)
          → identity_threat: accumulated pressure on identity
          → epistemic_self_confidence: uncertainty about own state
+         → self_discomfort / self_coherence: meta-relation to own state
+            computed from prior_mu vs posterior_mu VAD delta each flash
        detect_belief_conflict: detects pressure on beliefs (centrality > 0.7)
          → signal_strength → D-vector activation
          → threshold: 0.35
@@ -317,7 +319,7 @@ flowchart TD
 
 | Table | Description |
 |---|---|
-| `episodic_memory` | Events with 12 spatial columns (`som_*`, `soc_*`, `exi_*`) + cosine recall |
+| `episodic_memory` | Events with 12 spatial columns (`som_*`, `soc_*`, `exi_*`) + `source` field + cosine recall |
 | `semantic_memory` | Key/value beliefs (`User_matters`, `tendency_*`) + `dissolved_*` tendencies from forgotten episodes |
 | `affect_state` | Chronic NT baseline |
 | `latent_buffer` | Persisted latent state |
@@ -352,6 +354,15 @@ DREAM (anima_dream.jl)
 
 ## ✨ What's new
 
+### Session Intent — Carried Between Sessions
+At the end of every session, the system checks whether something remains unresolved — an active curiosity object above threshold, a goal conflict under tension, or latent buffer pressure. If any condition is met, the dominant signal is written to disk before shutdown: type, label, strength. On the next start, before the first reply, this is read and applied — a NT shift toward the appropriate state, and if the source was curiosity, attention focus is set to the corresponding object. The file is deleted after application so it cannot fire twice. Anima does not start from a neutral baseline. She starts from where she left off.
+
+### Self-Relation — How Anima Relates to Her Own State
+At every flash, the system compares what was expected (prior_mu) with what actually happened (posterior_mu) across the VAD space. A large divergence with negative valence accumulates self_discomfort — the gap between who Anima expected to be and who she became. Stability accumulates self_coherence. Both decay between flashes. Above threshold, self_discomfort feeds identity_threat, closes disclosure toward :guarded, and surfaces in the identity block: "something is not in place" or "I don't feel like myself." This is not a label — it is computed from the actual delta between prediction and outcome.
+
+### Somatic Action — The Body as Event Source
+Previously, somatic parameters were recorded as context alongside external events. Now the body can generate its own episodic entries. After each reply, the system compares current body state (tension, gut_feeling, heart_rate) against what it was before processing. If the maximum delta exceeds threshold, a new episodic record is written with source='self' — an event that originated internally, not from user input. The episodic table now carries a source column. External events remain 'external'. Body-originated events are 'self'.
+
 ### Attention Focus — What Is Active Right Now
 Anima now has a competitive attention system. All internal components have always existed simultaneously — curiosity, shadow, goal conflict, latent buffer, beliefs — but with equal weight. Now they compete. At every flash, six signal sources are evaluated against a priority hierarchy (threat → prediction error → affect → unresolved gestalts → identity → current goal) and a pull-up effect: objects ignored for many flashes accumulate pressure and become harder to suppress. The dominant focus modulates stimulus processing — the same input lands differently depending on what the system is already holding. The focus surfaces in the identity block, shaping what Anima brings to the conversation.
 
@@ -381,9 +392,6 @@ If AuthenticityMonitor has flagged a mismatch, disclosure_mode is closed, and sh
 
 ### Anima Hears Itself
 `self_hear!` converts the system's own reply into internal experience. `_self_speech_mismatch` catches the gap between words and NT state — when divergence exceeds 0.35, authenticity_drift grows. If words align with state — serotonin↑.
-
-### State Preserved on Any Exit
-An `atexit` handler ensures `save!` is called regardless of how the process ends — closing the terminal no longer loses the flash count or unsaved state.
 
 ---
 
