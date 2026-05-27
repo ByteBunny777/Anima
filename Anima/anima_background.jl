@@ -998,6 +998,36 @@ function start_background!(
             "  [BG] Запущено ($mem_label). BPM=$(round(60000.0/a.heartbeat.period_ms,digits=1))",
         )
 
+        # session_intent — завантажуємо що Аніма несла між сесіями
+        _intent_path = replace(a.psyche_mem_path, "psyche" => "session_intent")
+        if isfile(_intent_path)
+            try
+                _intent = JSON3.read(read(_intent_path, String), Dict{String,Any})
+                _itype   = get(_intent, "type", "")
+                _ilabel  = get(_intent, "label", "")
+                _isignal = Float64(get(_intent, "signal", 0.0))
+                @info "[SESSION_INTENT] несе $_itype: \"$_ilabel\" (signal=$(round(_isignal, digits=2)))"
+                # NT зсув залежно від типу
+                if _itype == "curiosity"
+                    a.nt.dopamine     = clamp(a.nt.dopamine + _isignal * 0.08, 0.0, 1.0)
+                    a.nt.noradrenaline = clamp(a.nt.noradrenaline + _isignal * 0.04, 0.0, 1.0)
+                    # AttentionFocus — якщо є відповідний curiosity об'єкт
+                    _co = top_curiosity(a.curiosity_registry)
+                    if !isnothing(_co) && _co.label == _ilabel
+                        a.attention_focus.dominant = FocusObject(:curiosity, _co.label, _co.intensity, 0)
+                    end
+                elseif _itype == "goal_conflict"
+                    a.nt.noradrenaline = clamp(a.nt.noradrenaline + _isignal * 0.07, 0.0, 1.0)
+                    a.nt.serotonin     = clamp(a.nt.serotonin - _isignal * 0.04, 0.0, 1.0)
+                elseif _itype == "latent_pressure"
+                    a.nt.noradrenaline = clamp(a.nt.noradrenaline + _isignal * 0.06, 0.0, 1.0)
+                end
+                rm(_intent_path)  # застосували — видаляємо щоб не застосувати двічі
+            catch e
+                @warn "[SESSION_INTENT] помилка завантаження: $e"
+            end
+        end
+
         while !bg.stop_signal[]
             try
                 result = background_tick!(a, bg)
@@ -1482,7 +1512,10 @@ $(dominant_note)"""
                     "  Тіло: $(build_inner_voice(a.body, a.nt, Int(a.crisis.current_mode), phi, a.flash_count))",
                 )
                 println(
-                    "  Увага: $(a.attention.focus) | Shame=$(round(a.shame.level,digits=3)) Continuity=$(round(a.anchor.continuity,digits=3))\n",
+                    "  Увага: $(a.attention.focus) | Shame=$(round(a.shame.level,digits=3)) Continuity=$(round(a.anchor.continuity,digits=3))",
+                )
+                println(
+                    "  SelfRelation: sd=$(round(a.agency.self_discomfort,digits=3)) sc=$(round(a.agency.self_coherence,digits=3))\n",
                 )
             elseif cmd == ":vfe"
                 vad=to_vad(a.nt);
@@ -1626,6 +1659,9 @@ $(dominant_note)"""
                 a._last_user_time = time()
                 a.sig_layer.ticks_since_novelty = 0   # новий зовнішній стимул — голод скидається
                 a.boredom = max(0.0, a.boredom - 0.25) # контакт частково знімає нудьгу
+                _prev_body_tension  = a.body.muscle_tension
+                _prev_body_gut      = a.body.gut_feeling
+                _prev_body_hr       = a.body.heart_rate
                 r = experience!(a, stim; user_message = cmd, mem = mem)
                 dialog_to_belief_signal!(a.sbg, cmd, a.flash_count)
                 # Genuine Dialogue: детекція уникнутих тем
@@ -1695,6 +1731,41 @@ $(dominant_note)"""
                     catch e
                         ;
                         @warn "[MEM] write event: $e";
+                    end
+
+                    # somatic_action — тілесна реакція як власна подія в episodic
+                    _som_delta_tension = abs(a.body.muscle_tension - _prev_body_tension)
+                    _som_delta_gut     = abs(a.body.gut_feeling - _prev_body_gut)
+                    _som_delta_hr      = abs(a.body.heart_rate - _prev_body_hr)
+                    _som_delta_max     = max(_som_delta_tension, _som_delta_gut, _som_delta_hr)
+                    if _som_delta_max > 0.12
+                        _som_label =
+                            _som_delta_tension >= _som_delta_gut && _som_delta_tension >= _som_delta_hr ?
+                                (a.body.muscle_tension > _prev_body_tension ? "somatic_tension_rise" : "somatic_tension_drop") :
+                            _som_delta_gut >= _som_delta_hr ?
+                                (a.body.gut_feeling > _prev_body_gut ? "somatic_gut_ease" : "somatic_gut_drop") :
+                                (a.body.heart_rate > _prev_body_hr ? "somatic_hr_rise" : "somatic_hr_drop")
+                        try
+                            memory_write_event!(
+                                mem,
+                                a.flash_count,
+                                _som_label,
+                                Float64(a.body.heart_rate),
+                                Float64(a.body.gut_feeling * 2.0 - 1.0),  # gut → valence [-1,1]
+                                _som_delta_max,
+                                _som_delta_max * 0.6,
+                                Float64(a.body.muscle_tension),
+                                r.phi;
+                                intero_error = Float64(a.interoception.allostatic_load),
+                                hrv = Float64(a.heartbeat.hrv),
+                                agency_confidence = Float64(a.agency.agency_confidence),
+                                epistemic_trust = Float64(a.sbg.epistemic_trust),
+                                source = "self",
+                            )
+                            @info "[SOMATIC] тілесна подія: $_som_label (delta=$(round(_som_delta_max, digits=2)))"
+                        catch e
+                            @warn "[SOMATIC] memory write: $e"
+                        end
                     end
                 end
 
