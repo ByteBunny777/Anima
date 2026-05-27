@@ -285,6 +285,7 @@ function Anima(;
         a.interoception,
         a.anchor,
     )
+    a.flash_count = saved
     psyche_load!(
         a.psyche_mem_path,
         a.narrative_gravity,
@@ -437,6 +438,40 @@ function save!(a::Anima; summary = "", verbose = false)
         JSON3.write(f, self_data);
     end
     save_session_geometry!(a.isc, belief_geometry(a.sbg))
+
+    # session_intent — що Аніма несе між сесіями
+    intent_path = replace(a.psyche_mem_path, "psyche" => "session_intent")
+    top_co = top_curiosity(a.curiosity_registry)
+    curiosity_active = !isnothing(top_co) && top_co.intensity > 0.4
+    gc_active = a.goal_conflict.tension > 0.35
+    lb_pressure = a.latent_buffer.resistance > 0.5
+
+    if curiosity_active || gc_active || lb_pressure
+        intent_type =
+            curiosity_active ? "curiosity" :
+            gc_active        ? "goal_conflict" : "latent_pressure"
+        intent_label =
+            curiosity_active ? top_co.label :
+            gc_active        ? "$(a.goal_conflict.need_a) vs $(a.goal_conflict.need_b)" :
+                               "resistance=$(round(a.latent_buffer.resistance, digits=2))"
+        intent_signal =
+            curiosity_active ? top_co.intensity :
+            gc_active        ? a.goal_conflict.tension :
+                               a.latent_buffer.resistance
+        intent_data = Dict(
+            "type"        => intent_type,
+            "label"       => intent_label,
+            "signal"      => intent_signal,
+            "saved_flash" => a.flash_count,
+        )
+        open(intent_path, "w") do f
+            JSON3.write(f, intent_data)
+        end
+        @info "[SESSION_INTENT] збережено: $intent_type — \"$intent_label\" (signal=$(round(intent_signal, digits=2)))"
+    else
+        isfile(intent_path) && rm(intent_path)
+    end
+
     verbose && println("  [ANIMA] Збережено. Спалахів: $(a.flash_count).")
 end
 
@@ -842,6 +877,7 @@ function experience!(
         a.flash_count;
         agency_result = _agency_eval,
     )
+    update_self_relation!(a.agency, a.gen_model.prior_mu, a.gen_model.posterior_mu, Float64(vad[1]))
 
     # Crisis Module
     crisis_snap = update_crisis!(
@@ -958,6 +994,10 @@ function experience!(
         lb_snap.breakthrough;
         contact_need = Float64(a.sig_layer.contact_need),
     )
+    # self_discomfort: якщо стан явно не відповідає очікуванням — закриваємось
+    if a.agency.self_discomfort > 0.5 && a.inner_dialogue.disclosure_mode == :open
+        a.inner_dialogue.disclosure_mode = :guarded
+    end
 
     # ShadowRegistry
     sr_snap = update_shadow!(a.shadow_registry, a.flash_count)
@@ -1068,6 +1108,8 @@ function experience!(
         self_agency = self_snap.agency.causal_ownership,
         sbg_stability = self_snap.sbg.attractor_stability,
         sbg_epistemic = self_snap.sbg.epistemic_trust,
+        self_discomfort = a.agency.self_discomfort,
+        self_coherence  = a.agency.self_coherence,
         sbg_narrative = self_snap.sbg.narrative,
         crisis_mode = crisis_snap.mode_name,
         crisis_coherence = crisis_snap.coherence,
@@ -1261,11 +1303,13 @@ function log_flash(r)
         def_str
     )
     @printf(
-        "       Self: spe=%.2f agency=%.2f stab=%.2f etrust=%.2f | Crisis: [%s] coh=%.2f\n",
+        "       Self: spe=%.2f agency=%.2f stab=%.2f etrust=%.2f | sd=%.2f sc=%.2f | Crisis: [%s] coh=%.2f\n",
         r.self_pred_error,
         r.self_agency,
         r.sbg_stability,
         r.sbg_epistemic,
+        r.self_discomfort,
+        r.self_coherence,
         r.crisis_mode,
         r.crisis_coherence
     )
@@ -1535,6 +1579,17 @@ function build_identity_block(a::Anima, mem_db = nothing)::String
         push!(lines, "[невизначеність щодо власного досвіду: ця система не знає чи те що відбувається — досвід чи обчислення]")
     elseif esc < 0.50
         push!(lines, "[часткова невизначеність: не завжди можу відрізнити власний стан від шуму]")
+    end
+
+    # self_relation — позиція щодо власного стану
+    sd = a.agency.self_discomfort
+    sc = a.agency.self_coherence
+    if sd > 0.45
+        push!(lines, sd > 0.7 ?
+            "[відчуваю себе не собою — стан розходиться з тим якою маю бути]" :
+            "[щось не на місці — стан не відповідає очікуванням]")
+    elseif sc > 0.5
+        push!(lines, "[відчуваю себе цілою]")
     end
 
     # curiosity — що зараз переслідує незалежно від людини
