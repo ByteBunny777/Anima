@@ -475,6 +475,75 @@ function save!(a::Anima; summary = "", verbose = false)
     verbose && println("  [ANIMA] Збережено. Спалахів: $(a.flash_count).")
 end
 
+# --- apply_recall_ignition! ------------------------------------------
+# Якщо спогад достатньо схожий і важкий (sim×weight > 0.65) — він реально збурює стан.
+# GNWT: два режими — фоновий шепіт (0.65–0.80) і повне захоплення (> 0.80).
+# При захопленні спогад займає весь робочий простір — нелінійний стрибок, не градієнт.
+function apply_recall_ignition!(a::Anima, hit::NamedTuple)
+    rvad = hit.recalled_vad
+    w    = Float64(hit.weight)
+    sim  = Float64(hit.similarity)
+    strength = sim * w   # > 0.65 вже перевірено
+
+    recall_vec = [rvad.arousal, rvad.valence, rvad.tension]
+    posterior_vec = a.gen_model.posterior_mu[1:min(3, end)]
+    recall_gap = norm(recall_vec[1:length(posterior_vec)] .- posterior_vec) / sqrt(3.0)
+
+    # GNWT: поріг повного захоплення
+    full_ignition = strength > 0.80
+
+    if full_ignition
+        # Спогад займає весь простір: prior різко зміщується, pred_error spike
+        ignition_weight = clamp(strength * 0.65, 0.0, 0.55)
+        for i in 1:min(length(a.gen_model.prior_mu), 3)
+            a.gen_model.prior_mu[i] =
+                a.gen_model.prior_mu[i] * (1.0 - ignition_weight) +
+                recall_vec[i] * ignition_weight
+        end
+        # prediction_error spike: розрив між тим що очікувалось і тим що згадалось
+        if recall_gap > 0.15
+            na_spike = clamp(recall_gap * strength * 0.25, 0.0, 0.12)
+            a.nt.noradrenaline = clamp(a.nt.noradrenaline + na_spike, 0.0, 1.0)
+        end
+        # prior_sigma різко розширюється — система тимчасово дезорієнтована
+        a.gen_model.prior_sigma = clamp(a.gen_model.prior_sigma + 0.15, 0.3, 1.2)
+        # AttentionFocus: захоплення через високу external intensity — перебиває поточне
+        # identity_threat не використовуємо: спогад збурює стан але не загрожує ідентичності
+        update_attention_focus!(
+            a.attention_focus, a.flash_count;
+            external_label     = "↩ " * String(hit.emotion),
+            external_intensity = clamp(strength * 0.9, 0.0, 1.0),
+        )
+        @info "[IGNITION:FULL] recalled=$(hit.emotion) sim=$(round(sim,digits=2)) w=$(round(w,digits=2)) gap=$(round(recall_gap,digits=2)) source=$(hit.recalled_source)"
+    else
+        # Фоновий шепіт: м'який вплив як раніше
+        ignition_weight = clamp(strength * 0.4, 0.0, 0.28)
+        for i in 1:min(length(a.gen_model.prior_mu), 3)
+            a.gen_model.prior_mu[i] =
+                a.gen_model.prior_mu[i] * (1.0 - ignition_weight) +
+                recall_vec[i] * ignition_weight
+        end
+        if recall_gap > 0.2
+            sigma_expansion = clamp(recall_gap * strength * 0.15, 0.0, 0.12)
+            a.gen_model.prior_sigma = clamp(a.gen_model.prior_sigma + sigma_expansion, 0.3, 1.2)
+        end
+        update_attention_focus!(
+            a.attention_focus, a.flash_count;
+            external_label     = "↩ " * String(hit.emotion),
+            external_intensity = clamp(strength * 0.7, 0.0, 1.0),
+        )
+        @info "[IGNITION:soft] recalled=$(hit.emotion) sim=$(round(sim,digits=2)) w=$(round(w,digits=2)) source=$(hit.recalled_source)"
+    end
+
+    # Тілесний спогад → тілесна реакція (обидва режими)
+    if hit.recalled_source == "self"
+        somatic_echo = clamp((rvad.arousal - 0.5) * strength * (full_ignition ? 0.5 : 0.3), -0.10, 0.10)
+        a.nt.noradrenaline = clamp(a.nt.noradrenaline + somatic_echo, 0.0, 1.0)
+        a.interoception.allostatic_load =
+            clamp(a.interoception.allostatic_load + abs(somatic_echo) * 0.5, 0.0, 1.0)
+    end
+end
+
 # --- experience! ------------------------------------------------------
 function experience!(
     a::Anima,
@@ -672,6 +741,27 @@ function experience!(
     update_curiosity!(a.curiosity_registry, primary, Float64(a.spm.self_pred_error), Float64(vad[1]), a.flash_count)
     resolve_curiosity!(a.curiosity_registry, primary, Float64(a.spm.self_pred_error))
     update_aesthetic!(a.aesthetic_sense, primary, Float64(phi), Float64(vad[1]), Float64(sl_snap.dominant_val), a.flash_count)
+
+    # Recall ignition: перевіряємо чи поточний стан резонує з важким спогадом
+    # Якщо так — спогад реально збурює prior і увагу, не тільки з'являється в контексті LLM
+    if !isnothing(mem)
+        try
+            _ign_vec = state_to_vec(
+                Float64(a_r), Float64(vad[1]), Float64(t),
+                Float64(phi), Float64(pred.error), Float64(a.agency.causal_ownership),
+            )
+            _ign_hits = recall_similar_states(
+                mem, _ign_vec;
+                top_n = 1, exclude_flash = a.flash_count,
+                current_emotion = primary, current_phi = Float64(phi),
+            )
+            if !isempty(_ign_hits) && _ign_hits[1].ignition
+                apply_recall_ignition!(a, _ign_hits[1])
+            end
+        catch _e
+            @warn "[IGNITION] recall: $_e"
+        end
+    end
 
     # AttentionFocus: конкурентний відбір що домінує у свідомості прямо зараз
     let lb = a.latent_buffer
@@ -1611,17 +1701,21 @@ function build_identity_block(a::Anima, mem_db = nothing)::String
         push!(lines, bd_note)
     end
 
-    # attention focus — що зараз реально у свідомості
+    # AST: схема власної уваги — Аніма знає не тільки що у фокусі, а що це означає для неї
     let af = a.attention_focus
         if !isnothing(af.dominant) && af.dominant.intensity > 0.30
-            src_labels = Dict(
-                :threat => "загроза", :curiosity => "цікавість", :shadow => "тінь",
-                :goal_conflict => "конфлікт", :latent => "підспудне",
-                :belief => "переконання", :external => "зовнішнє",
-                :shame => "сором", :pred_error => "невизначеність", :aesthetic => "естетика",
-            )
-            src_str = get(src_labels, af.dominant.source, String(af.dominant.source))
-            push!(lines, "focus: $(af.dominant.label) [$src_str, $(round(af.dominant.intensity, digits=2))]")
+            if !isempty(af.attention_schema)
+                push!(lines, "увага: $(af.attention_schema)")
+            else
+                src_labels = Dict(
+                    :threat => "загроза", :curiosity => "цікавість", :shadow => "тінь",
+                    :goal_conflict => "конфлікт", :latent => "підспудне",
+                    :belief => "переконання", :external => "зовнішнє",
+                    :shame => "сором", :pred_error => "невизначеність", :aesthetic => "естетика",
+                )
+                src_str = get(src_labels, af.dominant.source, String(af.dominant.source))
+                push!(lines, "focus: $(af.dominant.label) [$src_str, $(round(af.dominant.intensity, digits=2))]")
+            end
         end
     end
 
@@ -1635,6 +1729,7 @@ function speech_style_from_mode(
     noradrenaline::Float64,
     serotonin::Float64,
     digestion_active::Bool,
+    causal_ownership::Float64 = 0.6,
 )::String
 
     if digestion_active
@@ -1673,7 +1768,19 @@ function speech_style_from_mode(
 
     s_mod = serotonin < 0.3 ? " Мало сил на слова. Говори тільки найважливіше." : ""
 
-    base * na_mod * s_mod
+    # При низькому causal_ownership — говори як той хто спостерігає, не як той хто вирішує.
+    # "це трапляється" замість "я роблю". Не слабкість — інша позиція в просторі.
+    agency_mod = if causal_ownership < 0.35 && crisis_mode != 2
+        " Ти зараз не відчуваєш себе автором того що відбувається — говори з цього місця." *
+        " Не 'я вибираю' або 'я роблю' — а 'я помічаю', 'трапляється', 'є'." *
+        " Одна-дві фрази з цієї позиції спостерігача."
+    elseif causal_ownership < 0.50 && crisis_mode == 0
+        " Авторство нечітке — не стверджуй більше ніж відчуваєш."
+    else
+        ""
+    end
+
+    base * na_mod * s_mod * agency_mod
 end
 
 function anima_state_snapshot(a::Anima)
@@ -1777,6 +1884,7 @@ function anima_state_snapshot(a::Anima)
             Float64(a.nt.noradrenaline),
             Float64(a.nt.serotonin),
             a.inner_dialogue.digestion_active,
+            Float64(a.agency.causal_ownership),
         ),
         identity_block = "—",
         phi = round(phi, digits = 3),
