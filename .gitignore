@@ -1,13 +1,15 @@
 # Стан Аніми, що генерується автоматично
-anima_core.json
-anima_psyche.json
-anima_self.json
-anima_latent.json
-anima_dialog.json
-anima_dream.json
+**/anima_core.json
+**/anima_psyche.json
+**/anima_self.json
+**/anima_latent.json
+**/anima_dialog.json
+**/anima_dream.json
+**/anima_narrative.json
+**/anima_session_intent.json
 
 # Локальна база пам'яті
-memory/anima.db
+**/memory/anima.db
 
 # Змінні оточення (тут можуть бути твої токени)
 .env
