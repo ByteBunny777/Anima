@@ -1804,6 +1804,7 @@ $(dominant_note)"""
                         api_key = llm_key,
                         is_ollama = is_ollama,
                         want = input_want,
+                        mem_db = !isnothing(mem) ? mem : nothing,
                     )
                     println(" (відповідь прийде після наступного введення)")
                 end
