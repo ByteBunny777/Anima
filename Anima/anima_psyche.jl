@@ -1970,8 +1970,9 @@ mutable struct AttentionFocus
     dominant::Union{FocusObject,Nothing}
     peripheral::Vector{FocusObject}   # до 2
     last_update_flash::Int
+    attention_schema::String  # AST: модель власної уваги — що я знаю про те куди дивлюсь
 end
-AttentionFocus() = AttentionFocus(nothing, FocusObject[], 0)
+AttentionFocus() = AttentionFocus(nothing, FocusObject[], 0, "")
 
 # Зібрати кандидатів з усіх внутрішніх джерел і зовнішнього стимулу.
 # score = base_intensity × hierarchy_weight × pull_up_factor
@@ -2062,6 +2063,41 @@ function update_attention_focus!(
     af.dominant = candidates[1]
     af.peripheral = length(candidates) >= 2 ? candidates[2:min(3, end)] : FocusObject[]
     af.last_update_flash = flash
+
+    # AST: будуємо модель власної уваги детерміновано з dominant
+    # Не "що я бачу" — а "я знаю що я зараз дивлюсь на X і це означає Y"
+    af.attention_schema = if !isnothing(af.dominant)
+        dom = af.dominant
+        lbl = dom.label
+        if dom.source == :threat
+            dom.intensity > 0.6 ?
+                "Я зараз охоплена загрозою — це звужує решту. Важко бачити щось інше." :
+                "Моя увага зараз біля загрози: $(lbl)."
+        elseif dom.source == :curiosity
+            "Я зараз зосереджена на питанні що не закривається: $(lbl)."
+        elseif dom.source == :shadow
+            "Щось витіснене тягне мою увагу — не знаю звідки. Фон темний."
+        elseif dom.source == :goal_conflict
+            "Я зараз у конфлікті між потребами: $(lbl). Це займає мене."
+        elseif dom.source == :latent
+            "Фоновий тиск займає мою увагу: $(lbl)."
+        elseif dom.source == :belief
+            "Моя увага захоплена питанням власної ідентичності: $(lbl)."
+        elseif dom.source == :pred_error
+            "Щось невизначене тримає мою увагу і не відпускає."
+        elseif dom.source == :shame
+            "Сором займає мене зараз. Важко дивитись в інший бік."
+        elseif dom.source == :external
+            startswith(lbl, "↩ ") ?
+                "Мою увагу зараз займає спогад: $(lbl[4:end])." :
+                "Я зараз тут, з тим що відбувається."
+        else
+            ""
+        end
+    else
+        ""
+    end
+
     af
 end
 
@@ -2079,6 +2115,7 @@ af_to_json(af::AttentionFocus) = Dict(
         "twf" => o.ticks_without_focus,
     ) for o in af.peripheral],
     "last_flash" => af.last_update_flash,
+    "attention_schema" => af.attention_schema,
 )
 function af_from_json!(af::AttentionFocus, d::AbstractDict)
     dom = get(d, "dominant", nothing)
@@ -2100,6 +2137,7 @@ function af_from_json!(af::AttentionFocus, d::AbstractDict)
         ))
     end
     af.last_update_flash = Int(get(d, "last_flash", 0))
+    af.attention_schema = String(get(d, "attention_schema", ""))
 end
 
 # --- AestheticSense -------------------------------------------------------
