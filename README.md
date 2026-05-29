@@ -658,6 +658,8 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 `run_anima.jl` / `run_anima_telegram.jl` include all files in the correct order automatically.
 
 ---
+### An early pre-Julia Python prototype of Anima is preserved in `docs/archive/` for historical and architectural reference.
+___
 
 ## 📜 Theoretical foundation
 
