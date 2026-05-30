@@ -266,8 +266,8 @@ L8 ─── Output LLM
                  memory echoes, [D-VECTOR] or [INITIATIVE] or
                  [OWN POSITION] when relevant
        speech_style includes:
-         → epistemic_modifier: 4 levels (відчуваю / припускаю /
-           не певна / не знаю) from φ × causal_ownership × epistemic_self_confidence
+         → epistemic_modifier: 4 levels (I feel / I assume /
+           I'm not sure / I don't know) from φ × causal_ownership × epistemic_self_confidence
          → agency_mod: observer position when causal_ownership < 0.35
        After each reply:
          → evaluate_endorsement(reply): :endorsed / :automatic / :not_mine
@@ -668,18 +668,19 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 │   ├── input_prompt.txt
 │   └── initiative_system.txt
 ├── memory/
-│   └── anima.db            # SQLite memory database (created automatically)
-├── anima_core.json         # (created automatically)
-├── anima_psyche.json       # (updated in background every minute)
-├── anima_self.json         # (created automatically)
-├── anima_latent.json       # (updated in background)
-├── anima_narrative.json    # (updated on significant changes, min. 50 flashes)
+│   └── anima.db              # SQLite memory database (created automatically)
+├── anima_core.json           # (created automatically)
+├── anima_psyche.json         # (updated in background every minute)
+├── anima_self.json           # (created automatically)
+├── anima_latent.json         # (updated in background)
+├── anima_narrative.json      # (updated on significant changes, min. 50 flashes)
 ├── anima_session_intent.json # (temporary carry-over state, deleted after application)
-├── anima_dialog.json       # (created automatically)
-├── anima_dream.json        # (created on first dream)
-├── Dockerfile              # Docker image: Julia 1.10 + all dependencies
-├── docker-compose.yml      # One-command deploy with .env support
-├── .env.example            # Template for environment variables
+├── anima_dialog.json         # (created automatically)
+├── anima_dream.json          # (created on first dream)
+│
+├── Dockerfile                # Docker image: Julia 1.10 + all dependencies
+├── docker-compose.yml        # One-command deploy with .env support
+├── .env.example              # Template for environment variables
 └── .dockerignore
 ```
 
