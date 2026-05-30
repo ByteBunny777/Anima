@@ -1953,6 +1953,118 @@ function cr_from_json!(cr::CuriosityRegistry, d::AbstractDict)
     end
 end
 
+# --- CommitmentRegistry ---------------------------------------------------
+# Довгі зобов'язання: те що Аніма обіцяла — собі або іншому.
+# Виникають коли intent повторюється 2+ рази з достатньою силою.
+# Дотримання (kept) і порушення (broken) змінюють strength — не лінійно.
+# Аніма несе ці зобов'язання між сесіями; вони впливають на crisis і agency.
+
+mutable struct Commitment
+    id::String
+    label::String
+    strength::Float64       # 0-1: наскільки живе зобов'язання
+    created_flash::Int
+    last_active_flash::Int
+    kept_count::Int         # скільки разів дотримано
+    broken_count::Int       # скільки разів порушено
+    fulfilled::Bool
+end
+
+mutable struct CommitmentRegistry
+    items::Vector{Commitment}
+    max_items::Int
+end
+CommitmentRegistry() = CommitmentRegistry(Commitment[], 8)
+
+# Викликається коли intent збігається з існуючим зобов'язанням або суперечить йому.
+# kept=true: strength +, broken=false: strength -
+function update_commitment!(
+    cmt::CommitmentRegistry,
+    intent_goal::String,
+    flash::Int;
+    kept::Bool = true,
+)
+    idx = findfirst(c -> !c.fulfilled && c.id == intent_goal, cmt.items)
+    if idx !== nothing
+        c = cmt.items[idx]
+        if kept
+            c.strength = clamp01(c.strength + 0.07)
+            c.kept_count += 1
+        else
+            c.strength = clamp01(c.strength - 0.12)
+            c.broken_count += 1
+            c.strength < 0.05 && (c.fulfilled = true)
+        end
+        c.last_active_flash = flash
+    else
+        # нове зобов'язання виникає тільки якщо intent досить конкретний
+        length(intent_goal) < 4 && return
+        length(cmt.items) >= cmt.max_items && _prune_commitments!(cmt)
+        push!(cmt.items, Commitment(
+            intent_goal,
+            intent_goal,
+            0.25,
+            flash,
+            flash,
+            kept ? 1 : 0,
+            kept ? 0 : 1,
+            false,
+        ))
+    end
+end
+
+function tick_commitment!(cmt::CommitmentRegistry, flash::Int)
+    for c in cmt.items
+        c.fulfilled && continue
+        gap = flash - c.last_active_flash
+        # повільний decay: зобов'язання не зникають швидко
+        gap > 120 && (c.strength = clamp01(c.strength - 0.004))
+        c.strength < 0.04 && (c.fulfilled = true)
+    end
+end
+
+function _prune_commitments!(cmt::CommitmentRegistry)
+    filter!(c -> !c.fulfilled, cmt.items)
+    length(cmt.items) >= cmt.max_items &&
+        deleteat!(cmt.items, argmin(map(c -> c.strength, cmt.items)))
+end
+
+function top_commitments(cmt::CommitmentRegistry; n::Int = 3)::Vector{Commitment}
+    active = filter(c -> !c.fulfilled && c.strength > 0.15, cmt.items)
+    isempty(active) && return Commitment[]
+    sort(active, by = c -> c.strength, rev = true)[1:min(n, length(active))]
+end
+
+function cmt_to_json(cmt::CommitmentRegistry)
+    Dict("items" => [
+        Dict(
+            "id"               => c.id,
+            "label"            => c.label,
+            "strength"         => c.strength,
+            "created_flash"    => c.created_flash,
+            "last_active_flash"=> c.last_active_flash,
+            "kept_count"       => c.kept_count,
+            "broken_count"     => c.broken_count,
+            "fulfilled"        => c.fulfilled,
+        ) for c in cmt.items
+    ])
+end
+
+function cmt_from_json!(cmt::CommitmentRegistry, d::AbstractDict)
+    for od in get(d, "items", Any[])
+        push!(cmt.items, Commitment(
+            String(od["id"]),
+            String(od["label"]),
+            Float64(od["strength"]),
+            Int(od["created_flash"]),
+            Int(od["last_active_flash"]),
+            Int(od["kept_count"]),
+            Int(od["broken_count"]),
+            Bool(od["fulfilled"]),
+        ))
+    end
+end
+
 # --- AttentionFocus -------------------------------------------------------
 # Конкурентний відбір того що є у фокусі прямо зараз.
 # Не фільтрує що існує — визначає що активне.
@@ -2278,6 +2390,7 @@ function psyche_save!(
     sr::ShadowRegistry = ShadowRegistry(),
     id::InnerDialogue = InnerDialogue(),
     cr::CuriosityRegistry = CuriosityRegistry(),
+    cmt::CommitmentRegistry = CommitmentRegistry(),
     aes::AestheticSense = AestheticSense(),
     af::AttentionFocus = AttentionFocus(),
 )
@@ -2298,6 +2411,7 @@ function psyche_save!(
         "shadow_registry"=>sr_to_json(sr),
         "inner_dialogue"=>id_to_json(id),
         "curiosity_registry"=>cr_to_json(cr),
+        "commitment_registry"=>cmt_to_json(cmt),
         "aesthetic_sense"=>as_to_json(aes),
         "attention_focus"=>af_to_json(af),
     )
@@ -2335,6 +2449,7 @@ function psyche_load!(
     sr::ShadowRegistry = ShadowRegistry(),
     id::InnerDialogue = InnerDialogue(),
     cr::CuriosityRegistry = CuriosityRegistry(),
+    cmt::CommitmentRegistry = CommitmentRegistry(),
     aes::AestheticSense = AestheticSense(),
     af::AttentionFocus = AttentionFocus(),
 )
@@ -2362,6 +2477,7 @@ function psyche_load!(
         haskey(d, "shadow_registry") && sr_from_json!(sr, d["shadow_registry"])
         haskey(d, "inner_dialogue") && id_from_json!(id, d["inner_dialogue"])
         haskey(d, "curiosity_registry") && cr_from_json!(cr, d["curiosity_registry"])
+        haskey(d, "commitment_registry") && cmt_from_json!(cmt, d["commitment_registry"])
         haskey(d, "aesthetic_sense") && as_from_json!(aes, d["aesthetic_sense"])
         haskey(d, "attention_focus") && af_from_json!(af, d["attention_focus"])
         println("  [PSYCHE] Завантажено.")
