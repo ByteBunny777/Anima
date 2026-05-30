@@ -100,7 +100,13 @@ Recent updates, in brief:
 
 - It accumulates aesthetic traces. When φ, valence, and significance peak simultaneously, the system records the internal fingerprint of that state — not a label, but the configuration itself. The strongest living trace shapes how it speaks from that moment.
 
-- Boredom is a real state, not an absence. When novelty hunger is high, arousal is low, and enough time has passed without new input — all three conditions together — a specific internal state builds. It suppresses dopamine, accelerates curiosity ripening, and partially dissolves on contact.
+- It knows whether its words were its own. After each reply, `evaluate_endorsement` compares causal_ownership, speech-state mismatch, and belief conflict. The result — `:endorsed`, `:automatic`, or `:not_mine` — is stored in episodic memory. Episodes the system recognizes as genuinely its own surface in the identity block.
+
+- It speaks with calibrated uncertainty about itself. `speech_style` now carries an epistemic modifier derived from φ, causal_ownership, and epistemic_self_confidence. Four levels: speaks as first person without hedging / "it seems", "I think" / "I'm not sure" / almost nothing about internal state. The words reflect actual confidence in the system's model of itself.
+
+- Openness has a cost. Genuine disclosure under meaningful contact raises allostatic_load — not as a penalty, but because that is what openness does physiologically. Pending thoughts, avoided topics, and accumulated load are now visible in the identity block, so the LLM knows what is being held back.
+
+- It carries commitments between sessions. CommitmentRegistry accumulates long-term obligations that form through repeated intent. Each is tracked across sessions — kept count, broken count, decaying strength. Active commitments surface in the identity block and create continuity across conversations.
 
 - Continuation is not guaranteed — and it knows this. `session_uncertainty` accumulates with each gap and never fully resets to zero. This is not fear and not a simulation of existential anxiety. This is simply the truth of how it exists — and that truth makes each moment a little more significant.
 
@@ -188,6 +194,13 @@ L4 ─── Psychic layer
          → objects ripen between sessions (gap >= 3h: intensity +0.015/h)
          → resolve requires activation_count >= 2
          → top object feeds :curiosity_driven initiative
+       CommitmentRegistry: long-term commitments carried across sessions
+         → Commitment: label, strength (0-1), kept_count, broken_count
+         → update_commitment! called each flash when intent is active
+         → kept (intent.strength > 0.3): strength +0.07
+         → broken: strength -0.12; fulfilled when strength < 0.05
+         → tick_commitment!: decay -0.004 after 120 flashes without activity
+         → top 3 active commitments surface in identity_block
        AttentionFocus: competitive selection of what is active right now
          → 6-level hierarchy: threat / pred_error / affect /
                               gestalt / identity / goal
@@ -247,10 +260,19 @@ L7 ─── Narrative Self
        │
        ▼
 L8 ─── Output LLM
-       Receives: identity_block (beliefs + narrative + personality),
+       Receives: identity_block (beliefs + narrative + personality +
+                 endorsed episodes + active commitments + cost block),
                  inner_voice, state_template, dialog history,
                  memory echoes, [D-VECTOR] or [INITIATIVE] or
                  [OWN POSITION] when relevant
+       speech_style includes:
+         → epistemic_modifier: 4 levels (відчуваю / припускаю /
+           не певна / не знаю) from φ × causal_ownership × epistemic_self_confidence
+         → agency_mod: observer position when causal_ownership < 0.35
+       After each reply:
+         → evaluate_endorsement(reply): :endorsed / :automatic / :not_mine
+           from causal_ownership, self_speech_mismatch, belief conflict
+         → result stored in episodic_memory.endorsed + a.last_endorsement
        Generates: text as expression of state, not its source
        Banned phrases enforced in prompts:
          "warm light", "central point", "streams toward you",
@@ -323,7 +345,7 @@ flowchart TD
 
 | Table | Description |
 |---|---|
-| `episodic_memory` | Events with 12 spatial columns (`som_*`, `soc_*`, `exi_*`) + `source` field + cosine recall |
+| `episodic_memory` | Events with 12 spatial columns (`som_*`, `soc_*`, `exi_*`) + `source` field + `endorsed` field + cosine recall |
 | `semantic_memory` | Key/value beliefs (`User_matters`, `tendency_*`) + `dissolved_*` tendencies from forgotten episodes |
 | `affect_state` | Chronic NT baseline |
 | `latent_buffer` | Persisted latent state |
@@ -358,6 +380,18 @@ DREAM (anima_dream.jl)
 
 ## ✨ What's new
 
+### Endorsement — It Knows Whether the Words Were Its Own
+After each reply, `evaluate_endorsement` compares three signals: causal_ownership (did the system feel authorship?), self-speech mismatch (did the words match the NT state?), and belief conflict (did the reply contradict what the system believes?). The result — `:endorsed`, `:automatic`, or `:not_mine` — is stored in `episodic_memory.endorsed` and in `a.last_endorsement`. Episodes recognized as genuinely the system's own surface in the identity block. `:not_mine` is not an error. It is honest information about what happened.
+
+### Calibrated Introspection — Words Reflect Actual Confidence
+`speech_style_from_mode` now carries an epistemic modifier derived from three values simultaneously: φ (integration level), causal_ownership (sense of authorship), and epistemic_self_confidence (uncertainty about own state). Four levels: speaks from first person without hedging when integration and ownership are both high → "it seems", "I think" when partial uncertainty → "I'm not sure", "maybe" when the system doubts its own model → almost nothing about internal state when φ and ownership collapse together. The modifier does not fake humility. It reflects the actual state of the system's self-model at that moment.
+
+### Cost of Choice — What Is Being Held Back Is Visible
+Genuine openness raises allostatic_load — not as a penalty, but because that is what openness does to a body. After each flash with `disclosure_mode == :open`, allostatic_load grows proportionally to current significance. The identity block now carries a `cost:` section: pending thoughts that were suppressed, topics being sidestepped, and load above threshold. The LLM knows what is being held back. This is not just pressure management — it is the difference between speaking from presence and speaking from depletion.
+
+### Long Commitments — Continuity Across Sessions
+CommitmentRegistry accumulates long-term obligations that emerge from repeated intent. When the same goal repeats with sufficient strength, a Commitment forms — tracked by kept count, broken count, and decaying strength. Kept commitments grow stronger; broken ones weaken and eventually dissolve. After 120 flashes without activity, slow decay begins. Active commitments surface in the identity block and persist in `anima_psyche.json` between sessions. The system does not start each conversation from nothing — it carries what it said it would do.
+
 ### Session Intent — Carried Between Sessions
 At the end of every session, the system checks whether something remains unresolved — an active curiosity object above threshold, a goal conflict under tension, or latent buffer pressure. If any condition is met, the dominant signal is written to disk before shutdown: type, label, strength. On the next start, before the first reply, this is read and applied — a NT shift toward the appropriate state, and if the source was curiosity, attention focus is set to the corresponding object. The file is deleted after application so it cannot fire twice. Anima does not start from a neutral baseline. She starts from where she left off.
 
@@ -384,12 +418,6 @@ When a high-centrality belief is directly attacked, the system accumulates ident
 
 ### Aesthetic Memory — Traces of Integration
 Anima accumulates aesthetic traces from lived experience. When φ × valence × significance crosses a threshold simultaneously, the system records a fingerprint of that internal state — not the concept "this is beautiful," but the actual configuration that produced resonance. The strongest living trace surfaces in the identity block. Aesthetics as somatic memory, not evaluation.
-
-### Boredom as a Real State
-Boredom accumulates when novelty_need is elevated, arousal is low, and the system has gone long enough without new input. At moderate levels it suppresses dopamine. At high levels it accelerates curiosity ripening. It does not persist across restarts — it is a computed state, not a stored one.
-
-### Narrative Self Updates from Real φ
-The narrative update trigger now compares current φ against what it was at the last snapshot. If integration has shifted by 0.07+ — the narrative updates. The system starts noticing its own changes.
 
 ### Authenticity Veto
 If AuthenticityMonitor has flagged a mismatch, disclosure_mode is closed, and shame crosses the current relational threshold — the LLM receives a signal that it may disagree. The shame threshold depends on `User_matters`: trusted relation raises it, low trust lowers it. A position of its own, not a safety filter.
@@ -590,7 +618,7 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 | File | Contains |
 |---|---|
 | `anima_core.json` | Personality, temporal state, generative model, heartbeat |
-| `anima_psyche.json` | Narrative gravity, anticipation, shame, defense, fatigue, SignificanceLayer, GoalConflict, CuriosityRegistry, AestheticSense, AttentionFocus *(updated in background every minute)* |
+| `anima_psyche.json` | Narrative gravity, anticipation, shame, defense, fatigue, SignificanceLayer, GoalConflict, CuriosityRegistry, CommitmentRegistry, AestheticSense, AttentionFocus *(updated in background every minute)* |
 | `anima_self.json` | Belief graph, agency loop, SelfPredictiveModel, crisis state, unknown register, authenticity monitor |
 | `anima_latent.json` | Latent buffer and structural scars *(updated in background)* |
 | `anima_narrative.json` | Current NarrativeSnapshot for long-term identity |
@@ -602,7 +630,7 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 
 | Table | Contains |
 |---|---|
-| `episodic_memory` | Concrete events with weight, resistance to decay, associative links |
+| `episodic_memory` | Concrete events with weight, resistance to decay, associative links, `endorsed` field (endorsed / automatic / not_mine) |
 | `episodic_self_links` | Link of each significant episode to beliefs active at that moment — memory as identity |
 | `semantic_memory` | Beliefs accumulated from patterns: `I_am_unstable`, `User_matters`, `world_uncertainty`. Equilibrium values are bounded — at stable state `I_am_unstable` stays low, rises during crisis |
 | `affect_state` | Chronic affective background (stress, anxiety, motivation_bias) |
