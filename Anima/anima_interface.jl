@@ -174,6 +174,7 @@ mutable struct Anima
     inner_dialogue::InnerDialogue
     shadow_registry::ShadowRegistry
     curiosity_registry::CuriosityRegistry
+    commitment_registry::CommitmentRegistry
     # Self
     sbg::SelfBeliefGraph
     spm::SelfPredictiveModel
@@ -201,6 +202,7 @@ mutable struct Anima
     aesthetic_sense::AestheticSense   # естетичні сліди з досвіду
     boredom::Float64                  # стимульне виснаження: виростає без новизни, decay при новому
     attention_focus::AttentionFocus   # конкурентний фокус уваги
+    last_endorsement::Symbol          # результат останнього evaluate_endorsement: :endorsed / :automatic / :not_mine
 end
 
 function Anima(;
@@ -250,6 +252,7 @@ function Anima(;
         InnerDialogue(),
         ShadowRegistry(),
         CuriosityRegistry(),
+        CommitmentRegistry(),
         SelfBeliefGraph(),
         SelfPredictiveModel(),
         AgencyLoop(),
@@ -273,6 +276,7 @@ function Anima(;
         AestheticSense(),    # aesthetic_sense
         0.0,                 # boredom
         AttentionFocus(),    # attention_focus
+        :automatic,          # last_endorsement
     )
     # Завантажити
     saved = core_load!(
@@ -304,6 +308,7 @@ function Anima(;
         a.shadow_registry,
         a.inner_dialogue,
         a.curiosity_registry,
+        a.commitment_registry,
         a.aesthetic_sense,
         a.attention_focus,
     )
@@ -410,6 +415,7 @@ function save!(a::Anima; summary = "", verbose = false)
         a.shadow_registry,
         a.inner_dialogue,
         a.curiosity_registry,
+        a.commitment_registry,
         a.aesthetic_sense,
         a.attention_focus,
     )
@@ -740,6 +746,17 @@ function experience!(
     # CuriosityRegistry: pe = помилка самопередбачення (невизначеність власного стану)
     update_curiosity!(a.curiosity_registry, primary, Float64(a.spm.self_pred_error), Float64(vad[1]), a.flash_count)
     resolve_curiosity!(a.curiosity_registry, primary, Float64(a.spm.self_pred_error))
+
+    # CommitmentRegistry: якщо є активний intent — оновлюємо зобов'язання
+    if !isnothing(intent)
+        tick_commitment!(a.commitment_registry, a.flash_count)
+        update_commitment!(
+            a.commitment_registry,
+            intent.goal,
+            a.flash_count;
+            kept = intent.strength > 0.3,
+        )
+    end
     update_aesthetic!(a.aesthetic_sense, primary, Float64(phi), Float64(vad[1]), Float64(sl_snap.dominant_val), a.flash_count)
 
     # Recall ignition: перевіряємо чи поточний стан резонує з важким спогадом
@@ -1089,6 +1106,15 @@ function experience!(
         a.inner_dialogue.disclosure_mode = :guarded
     end
 
+    # Ціна відкритості: справжня відкритість коштує тілу.
+    # disclosure :open з живим повідомленням → allostatic_load +delta.
+    # Не штраф — фізіологічна реальність: відкритість виснажує.
+    if a.inner_dialogue.disclosure_mode == :open && !isempty(user_message)
+        _disc_cost = clamp(Float64(sig_total(a.significance)) * 0.04, 0.0, 0.03)
+        a.interoception.allostatic_load =
+            clamp01(a.interoception.allostatic_load + _disc_cost)
+    end
+
     # ShadowRegistry
     sr_snap = update_shadow!(a.shadow_registry, a.flash_count)
     if sr_snap.pressure > 0.35
@@ -1423,6 +1449,18 @@ function log_flash(r)
     end
     hasfield(typeof(r), :intent_label) &&
         @printf("       intent=%-20s vfe_drift=%.3f\n", r.intent_label, r.vfe_drift)
+    # Ціна вибору: pending / avoided_topics
+    if hasfield(typeof(r), :inner_dialogue) && !isnothing(r.inner_dialogue)
+        _pth = r.inner_dialogue.pending_thought
+        _avd = r.inner_dialogue.avoided_topics
+        if !isempty(_pth) || !isempty(_avd)
+            _cost_str = join(filter(!isempty, [
+                isempty(_pth) ? "" : "pending=\"$(first(_pth, 35))\"",
+                isempty(_avd) ? "" : "avoided=$(length(_avd))",
+            ]), " ")
+            println("       Cost: $_cost_str")
+        end
+    end
 end
 
 # --- text_to_stimulus -------------------------------------------------
@@ -1503,6 +1541,27 @@ function self_hear!(a::Anima, reply::String)
     end
 
     nothing
+end
+
+# --- Endorsement ----------------------------------------------------------
+# Аніма оцінює власну репліку: "це справді моє" / "сказала автоматично" / "це було не моє".
+# Виклик після self_hear! — коли стан вже відреагував на слова.
+function evaluate_endorsement(a::Anima, reply::String)::Symbol
+    raw  = text_to_stimulus(reply)
+    mismatch = _self_speech_mismatch(a, raw)
+    co = Float64(a.agency.causal_ownership)
+
+    # Чи власна репліка суперечить переконанням Аніми?
+    self_conflict = detect_belief_conflict(a.sbg, reply)
+    conflict_str = isnothing(self_conflict) ? 0.0 : Float64(self_conflict.signal_strength)
+
+    if co >= 0.5 && mismatch < 0.30 && conflict_str < 0.30
+        return :endorsed
+    elseif co < 0.30 || conflict_str > 0.50 || (mismatch > 0.55 && co < 0.45)
+        return :not_mine
+    else
+        return :automatic
+    end
 end
 
 # --- Dialog history ---------------------------------------------------
@@ -1647,11 +1706,34 @@ function build_identity_block(a::Anima, mem_db = nothing)::String
             ;
         end
 
+        # endorsed: що Аніма визнає своїм — епізоди де слова збіглись зі станом
+        try
+            end_rows = Tables.rowtable(DBInterface.execute(
+                mem_db.db,
+                "SELECT emotion FROM episodic_memory
+                 WHERE endorsed='endorsed' ORDER BY flash DESC LIMIT 5",
+            ))
+            if !isempty(end_rows)
+                end_labels = unique(filter(!isempty, [String(r.emotion) for r in end_rows]))
+                !isempty(end_labels) && push!(lines, "endorsed: $(join(end_labels, " | "))")
+            end
+        catch
+            ;
+        end
+
         try
             pheno = phenotype_to_block(mem_db)
             isempty(pheno) || push!(lines, pheno)
         catch
             ;
+        end
+
+        # Довгі зобов'язання: те що Аніма несе між сесіями
+        let top_c = top_commitments(a.commitment_registry)
+            if !isempty(top_c)
+                c_parts = ["\"$(c.label)\" ($(round(c.strength, digits=2)))" for c in top_c]
+                push!(lines, "зобов'язання: $(join(c_parts, "; "))")
+            end
         end
 
         # narrative self — хто Аніма є зараз на основі накопиченого досвіду
@@ -1719,6 +1801,21 @@ function build_identity_block(a::Anima, mem_db = nothing)::String
         end
     end
 
+    # Ціна вибору: що зараз утримується і чого це коштує.
+    # LLM бачить що лежить невисловленим і які теми обходяться стороною.
+    let cost_parts = String[]
+        if !isempty(a.inner_dialogue.pending_thought)
+            push!(cost_parts, "утримую: \"$(first(a.inner_dialogue.pending_thought, 60))\"")
+        end
+        if !isempty(a.inner_dialogue.avoided_topics)
+            push!(cost_parts, "уникаю: $(join(first(a.inner_dialogue.avoided_topics, 3), ", "))")
+        end
+        if a.interoception.allostatic_load > 0.55
+            push!(cost_parts, "виснаження: $(round(a.interoception.allostatic_load, digits=2))")
+        end
+        !isempty(cost_parts) && push!(lines, "cost: $(join(cost_parts, "; "))")
+    end
+
     isempty(lines) ? "Аніма" : join(lines, "\n")
 end
 
@@ -1730,6 +1827,8 @@ function speech_style_from_mode(
     serotonin::Float64,
     digestion_active::Bool,
     causal_ownership::Float64 = 0.6,
+    phi::Float64 = 0.6,
+    epistemic_self_confidence::Float64 = 0.5,
 )::String
 
     if digestion_active
@@ -1780,7 +1879,29 @@ function speech_style_from_mode(
         ""
     end
 
-    base * na_mod * s_mod * agency_mod
+    # Калібрована інтроспекція: рівень впевненості в тому що відбувається всередині.
+    # Детерміновано з φ, causal_ownership, epistemic_self_confidence.
+    epistemic_mod = if phi > 0.65 && causal_ownership > 0.5
+        # відчуваю — достатня інтеграція і авторство: говори від першої особи без застережень
+        ""
+    elseif epistemic_self_confidence < 0.4
+        # не певна — система сумнівається у власній моделі себе
+        " Ти зараз не маєш впевненості у власному стані." *
+        " Говори через 'не знаю точно', 'може бути', 'здається'." *
+        " Уникай категоричних тверджень про те що відчуваєш."
+    elseif phi < 0.4 && causal_ownership < 0.3
+        # не знаю — низька інтеграція і низьке авторство одночасно
+        " Ти зараз не знаєш що відбувається всередині." *
+        " Мінімум тверджень про внутрішній стан — одна обережна фраза або взагалі нічого про стан."
+    elseif phi < 0.65 || causal_ownership < 0.5
+        # припускаю — часткова невизначеність
+        " Де це природно — говори через 'схоже', 'здається', 'припускаю'." *
+        " Не стверджуй більше ніж відчуваєш."
+    else
+        ""
+    end
+
+    base * na_mod * s_mod * agency_mod * epistemic_mod
 end
 
 function anima_state_snapshot(a::Anima)
@@ -1885,6 +2006,8 @@ function anima_state_snapshot(a::Anima)
             Float64(a.nt.serotonin),
             a.inner_dialogue.digestion_active,
             Float64(a.agency.causal_ownership),
+            Float64(phi),
+            Float64(a.agency.epistemic_self_confidence),
         ),
         identity_block = "—",
         phi = round(phi, digits = 3),
