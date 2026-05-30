@@ -1239,6 +1239,16 @@ function repl_with_background!(
                 if !startswith(llm_reply, "[LLM помилка")
                     # Аніма чує власні слова — не аналіз, а переживання
                     self_hear!(a, llm_reply)
+                    # Endorsement: чи ці слова справді були моїми?
+                    a.last_endorsement = evaluate_endorsement(a, llm_reply)
+                    if !isnothing(bg.mem) && a.last_endorsement != :automatic
+                        try
+                            update_episodic_endorsement!(bg.mem, a.flash_count, String(a.last_endorsement))
+                            @info "[ENDORSE] $(a.last_endorsement) flash=$(a.flash_count) co=$(round(a.agency.causal_ownership,digits=2))"
+                        catch e
+                            @warn "[ENDORSE] $e"
+                        end
+                    end
                     # Genuine Dialogue: пендинг висловлено — очищаємо
                     !isempty(a.inner_dialogue.pending_thought) &&
                         consume_pending_thought!(a.inner_dialogue)
