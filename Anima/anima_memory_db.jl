@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS episodic_memory (
         ("exi_agency",     "REAL"),
         ("exi_trust",      "REAL"),
         ("source",         "TEXT DEFAULT 'external'"),
+        ("endorsed",       "TEXT DEFAULT 'automatic'"),
     ]
         col, typ = col_def
         try
@@ -268,6 +269,17 @@ CREATE TABLE IF NOT EXISTS personality_traits (
     SQLite.execute(
         db,
         "CREATE INDEX IF NOT EXISTS idx_traits_score ON personality_traits(score DESC);",
+    )
+end
+
+# --- Endorsement update ---------------------------------------------------
+
+function update_episodic_endorsement!(mem::MemoryDB, flash::Int, endorsed::String)
+    DBInterface.execute(
+        mem.db,
+        """UPDATE episodic_memory SET endorsed=?
+           WHERE id=(SELECT MAX(id) FROM episodic_memory WHERE flash=?)""",
+        (endorsed, flash),
     )
 end
 
