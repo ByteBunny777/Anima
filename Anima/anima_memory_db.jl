@@ -146,8 +146,9 @@ CREATE TABLE IF NOT EXISTS episodic_memory (
         ("exi_pe",         "REAL"),
         ("exi_agency",     "REAL"),
         ("exi_trust",      "REAL"),
-        ("source",         "TEXT DEFAULT 'external'"),
-        ("endorsed",       "TEXT DEFAULT 'automatic'"),
+        ("source",            "TEXT DEFAULT 'external'"),
+        ("endorsed",          "TEXT DEFAULT 'automatic'"),
+        ("causal_ownership",  "REAL DEFAULT NULL"),
     ]
         col, typ = col_def
         try
@@ -280,6 +281,15 @@ function update_episodic_endorsement!(mem::MemoryDB, flash::Int, endorsed::Strin
         """UPDATE episodic_memory SET endorsed=?
            WHERE id=(SELECT MAX(id) FROM episodic_memory WHERE flash=?)""",
         (endorsed, flash),
+    )
+end
+
+function update_episodic_causal_ownership!(mem::MemoryDB, flash::Int, co::Float64)
+    DBInterface.execute(
+        mem.db,
+        """UPDATE episodic_memory SET causal_ownership=?
+           WHERE id=(SELECT MAX(id) FROM episodic_memory WHERE flash=?)""",
+        (co, flash),
     )
 end
 
