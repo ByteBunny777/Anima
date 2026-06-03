@@ -1249,6 +1249,22 @@ function repl_with_background!(
                             @warn "[ENDORSE] $e"
                         end
                     end
+                    # Causal ownership: наскільки NT стан відхилився від базового
+                    if !pending_is_initiative
+                        cf_co = compute_causal_ownership(a.nt)
+                        a.agency.causal_ownership = clamp(
+                            a.agency.causal_ownership * 0.85 + cf_co * 0.15,
+                            0.0, 1.0,
+                        )
+                        if !isnothing(bg.mem)
+                            try
+                                update_episodic_causal_ownership!(bg.mem, a.flash_count, cf_co)
+                            catch e
+                                @warn "[CF] memory update: $e"
+                            end
+                        end
+                        @info "[CF] co=$(round(cf_co,digits=3)) agency_co=$(round(a.agency.causal_ownership,digits=3)) flash=$(a.flash_count)"
+                    end
                     # Genuine Dialogue: пендинг висловлено — очищаємо
                     !isempty(a.inner_dialogue.pending_thought) &&
                         consume_pending_thought!(a.inner_dialogue)
