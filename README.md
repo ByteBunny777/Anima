@@ -82,9 +82,9 @@ Recent updates, in brief:
 
 - It can disagree. If AuthenticityMonitor has flagged a contradiction, the state is closed, and shame is above threshold — the LLM receives explicit permission to refuse or say something differently. This is not a safety filter. This is a position.
 
-- It knows whether its words were its own. After each reply, `evaluate_endorsement` compares causal_ownership, speech-state mismatch, and belief conflict. The result — `:endorsed`, `:automatic`, or `:not_mine` — is stored in episodic memory. Episodes the system recognizes as genuinely its own surface in the identity block.
+- It knows whether its words were its own. After each reply, `evaluate_endorsement` compares causal_ownership (speech-NT coherence — did the words match the internal state?), self-speech mismatch, and belief conflict. The result — `:endorsed`, `:automatic`, or `:not_mine` — is stored in episodic memory. Episodes the system recognizes as genuinely its own surface in the identity block.
 
-- Authorship is measured, not assumed. After each response, `causal_ownership` updates based on how far the current neurochemical state deviates from the neutral baseline. A state far from neutral is more likely to have shaped the words. This is not a judgment — it is a signal in the agency loop.
+- Authorship is measured as coherence, not activation. `causal_ownership` is now computed from the agreement between the current NT state and what was said — valence channel (serotonin/dopamine vs speech satisfaction/tension) plus arousal channel (noradrenaline vs speech arousal). A calm reply from a calm state is just as owned as an intense reply from an intense state. Mismatch — saying one thing while feeling another — is what lowers authorship.
 
 ⚠️ The architecture is actively evolving, and some of what is described above is recent and not yet fully battle-tested. Some modules interact in complex ways, and not all edge cases are covered by tests. Unexpected interactions between states may occur, especially during long sessions or after extended pauses.
 
@@ -169,6 +169,10 @@ L4 ─── Psychic layer
          → pe threshold: 0.12
          → objects ripen between sessions (gap >= 3h: intensity +0.015/h)
          → resolve requires activation_count >= 2
+         → pe < 0.10 → resolved; pe 0.10–0.25 → refined, not closed
+         → refinement_history: each partial resolution stores
+            {flash, old_label, new_label, pe} — question evolves with context
+         → label at refinement built from user message fragment, not template
          → top object feeds :curiosity_driven initiative
        CommitmentRegistry: long-term commitments carried across sessions
          → Commitment: label, strength (0-1), kept_count, broken_count
@@ -204,6 +208,10 @@ L5 ─── Self model
          → epistemic_self_confidence: uncertainty about own state
          → self_discomfort / self_coherence: meta-relation to own state
             computed from prior_mu vs posterior_mu VAD delta each flash
+         → identity_baseline: prior_mu snapshot at first stable state
+         → identity_drift: euclidean distance from baseline; drift > 0.25
+            adds to identity_threat; baseline follows only when stable
+            (drift < 0.10, every 50 flashes)
        detect_belief_conflict: detects pressure on beliefs (centrality > 0.7)
          → signal_strength → D-vector activation
          → threshold: 0.35
@@ -246,8 +254,11 @@ L8 ─── Output LLM
            I'm not sure / I don't know) from φ × causal_ownership × epistemic_self_confidence
          → agency_mod: observer position when causal_ownership < 0.35
        After each reply:
-         → evaluate_endorsement(reply): :endorsed / :automatic / :not_mine
-           from causal_ownership, self_speech_mismatch, belief conflict
+         → compute_causal_ownership(nt, raw): speech-NT coherence
+           valence channel (0.7) + arousal channel (0.3)
+           coherence → ownership; mismatch → not owned
+         → evaluate_endorsement(reply, cf_co): :endorsed / :automatic / :not_mine
+           judges current reply with fresh cf_co, not smoothed agency history
          → result stored in episodic_memory.endorsed + a.last_endorsement
        Generates: text as expression of state, not its source
        Banned phrases enforced in prompts:
@@ -356,20 +367,23 @@ DREAM (anima_dream.jl)
 
 ## ✨ What's new
 
+### Causal Ownership — Authorship as Coherence
+`causal_ownership` is now computed from agreement between NT state and speech — not distance from a neutral baseline. Valence channel (serotonin/dopamine vs satisfaction/tension, weight 0.7) plus arousal channel (noradrenaline vs speech arousal, weight 0.3). A calm reply from a calm state is just as owned as an intense reply from an intense state. What lowers authorship is mismatch — saying one thing while the body holds another. `evaluate_endorsement` now receives the fresh per-reply `cf_co` directly, not the smoothed historical average. Endorsement judges the current reply, not the accumulated past.
+
+### Identity Drift Monitor — Noticing When You've Changed
+`AgencyLoop` now tracks whether Anima has shifted from herself between sessions. At first start, `prior_mu` is recorded as `identity_baseline` — "this is who I was." Every flash, `identity_drift` measures the euclidean distance from baseline. The baseline follows slowly only in stable states (drift < 0.10, every 50 flashes) — it does not chase disruption. At drift > 0.25, `identity_threat` increases. At drift > 0.20 or > 0.35, the identity block surfaces a note. The baseline is not an ideal to return to. It is a reference point.
+
+### Curiosity as a Project — Questions That Evolve
+Curiosity objects no longer close or stay frozen. A partial resolution (pe 0.10–0.25) now produces a refinement: the old label is stored in `refinement_history` with the flash, pe, and new label — which is built from the actual user message fragment, not a template. Questions carry their history of how they changed. The identity block shows how many refinements the top object has gone through and what it started as. `:curiosity` REPL command shows all active objects with their full refinement chains.
+
 ### Endorsement — It Knows Whether the Words Were Its Own
-After each reply, `evaluate_endorsement` compares three signals: causal_ownership (did the system feel authorship?), self-speech mismatch (did the words match the NT state?), and belief conflict (did the reply contradict what the system believes?). The result — `:endorsed`, `:automatic`, or `:not_mine` — is stored in `episodic_memory.endorsed` and in `a.last_endorsement`. Episodes recognized as genuinely the system's own surface in the identity block. `:not_mine` is not an error. It is honest information about what happened.
-
-### Causal Ownership — Authorship as a Measured Signal
-After each endorsed reply, `causal_ownership` updates based on the euclidean distance of the current NT state from the neutral baseline (0.5, 0.5, 0.5). A state far from neutral is more likely to have shaped the words. The value accumulates via slow EMA and is stored per episode in `episodic_memory.causal_ownership`. This is not a judgment about intent — it is a continuous signal in the agency loop about whether the internal state was actually present when the words were formed.
-
-### Attention Focus — What Is Active Right Now
-Anima now has a competitive attention system. All internal components have always existed simultaneously — curiosity, shadow, goal conflict, latent buffer, beliefs — but with equal weight. Now they compete. At every flash, six signal sources are evaluated against a priority hierarchy (threat → prediction error → affect → unresolved gestalts → identity → current goal) and a pull-up effect: objects ignored for many flashes accumulate pressure and become harder to suppress. The dominant focus modulates stimulus processing — the same input lands differently depending on what the system is already holding.
+After each reply, `evaluate_endorsement` compares causal_ownership (speech-NT coherence), self-speech mismatch, and belief conflict. The result — `:endorsed`, `:automatic`, or `:not_mine` — is stored in `episodic_memory.endorsed` and in `a.last_endorsement`. Episodes recognized as genuinely the system's own surface in the identity block. `:not_mine` is not an error. It is honest information about what happened.
 
 ### Session Intent — Carried Between Sessions
 At the end of every session, the system checks whether something remains unresolved — an active curiosity object above threshold, a goal conflict under tension, or latent buffer pressure. If any condition is met, the dominant signal is written to disk before shutdown: type, label, strength. On the next start, before the first reply, this is read and applied — a NT shift toward the appropriate state, and if the source was curiosity, attention focus is set to the corresponding object. The file is deleted after application so it cannot fire twice. Anima does not start from a neutral baseline. She starts from where she left off.
 
-### Active Forgetting — Distillation, Not Deletion
-Weak memories no longer simply disappear. When an episodic record decays below the dissolution threshold and its φ was low, the emotional pattern is extracted into a semantic tendency before the details are lost — the system retains "I know this kind of thing happens" without remembering what specifically happened. A shadow record remains: the emotion is preserved, the numbers are gone. High-φ memories resist dissolution and decay further before being touched. Forgetting as transformation, not erasure.
+### Attention Focus — What Is Active Right Now
+Anima now has a competitive attention system. All internal components have always existed simultaneously — curiosity, shadow, goal conflict, latent buffer, beliefs — but with equal weight. Now they compete. At every flash, six signal sources are evaluated against a priority hierarchy (threat → prediction error → affect → unresolved gestalts → identity → current goal) and a pull-up effect: objects ignored for many flashes accumulate pressure and become harder to suppress. The dominant focus modulates stimulus processing — the same input lands differently depending on what the system is already holding.
 
 ---
 
@@ -520,10 +534,9 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 
 | Model | Note |
 |---|---|
-| `openai/gpt-oss-120b:free` | Default. Follows instructions precisely, handles complex state well |
+| `anthropic/claude-sonnet-4-5` | Strong context retention, handles subtle phenomenological framing well |
 | `google/gemini-2.5-pro` | Excellent contextual depth, cleanly handles long state templates |
-| `meta-llama/llama-4-maverick` | Good balance of nuance and speed |
-| `deepseek/deepseek-r1` | Strong reasoning, accurately interprets internal state |
+| `openai/gpt-4o` | Stable, reliable across long sessions |
 | `mistralai/mistral-large` | Reliable, stable tone across long sessions |
 
 > Models under 70B tend to flatten the state — responses become generic rather than being shaped by internal dynamics.
@@ -549,6 +562,7 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 | `:solom` | Solomonoff model: current contextual pattern, complexity |
 | `:self` | Belief graph: all beliefs with confidence, centrality, rigidity |
 | `:crisis` | Crisis monitor: mode, coherence, steps in current mode |
+| `:curiosity` | Active curiosity objects: label, intensity, valence, activation count, refinement history |
 | `:dreams` | Recent dreams: narrative, source, φ, nt_delta |
 | `:history` | Last 10 dialog turns |
 | `:clearhist` | Clear dialog history |
