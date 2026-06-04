@@ -1239,19 +1239,11 @@ function repl_with_background!(
                 if !startswith(llm_reply, "[LLM помилка")
                     # Аніма чує власні слова — не аналіз, а переживання
                     self_hear!(a, llm_reply)
-                    # Endorsement: чи ці слова справді були моїми?
-                    a.last_endorsement = evaluate_endorsement(a, llm_reply)
-                    if !isnothing(bg.mem) && a.last_endorsement != :automatic
-                        try
-                            update_episodic_endorsement!(bg.mem, a.flash_count, String(a.last_endorsement))
-                            @info "[ENDORSE] $(a.last_endorsement) flash=$(a.flash_count) co=$(round(a.agency.causal_ownership,digits=2))"
-                        catch e
-                            @warn "[ENDORSE] $e"
-                        end
-                    end
-                    # Causal ownership: наскільки NT стан відхилився від базового
+                    # Causal ownership: узгодженість між NT станом і тим що сказано
+                    # рахуємо до endorsement — endorsement судить цю репліку, не середню
+                    cf_raw = text_to_stimulus(llm_reply)
+                    cf_co = compute_causal_ownership(a.nt, cf_raw)
                     if !pending_is_initiative
-                        cf_co = compute_causal_ownership(a.nt)
                         a.agency.causal_ownership = clamp(
                             a.agency.causal_ownership * 0.85 + cf_co * 0.15,
                             0.0, 1.0,
@@ -1264,6 +1256,16 @@ function repl_with_background!(
                             end
                         end
                         @info "[CF] co=$(round(cf_co,digits=3)) agency_co=$(round(a.agency.causal_ownership,digits=3)) flash=$(a.flash_count)"
+                    end
+                    # Endorsement: чи ці слова справді були моїми?
+                    a.last_endorsement = evaluate_endorsement(a, llm_reply, cf_co)
+                    if !isnothing(bg.mem) && a.last_endorsement != :automatic
+                        try
+                            update_episodic_endorsement!(bg.mem, a.flash_count, String(a.last_endorsement))
+                            @info "[ENDORSE] $(a.last_endorsement) flash=$(a.flash_count) co=$(round(cf_co,digits=2))"
+                        catch e
+                            @warn "[ENDORSE] $e"
+                        end
                     end
                     # Genuine Dialogue: пендинг висловлено — очищаємо
                     !isempty(a.inner_dialogue.pending_thought) &&
