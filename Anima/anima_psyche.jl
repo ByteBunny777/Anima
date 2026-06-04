@@ -1833,6 +1833,13 @@ end
 # Конкретні об'єкти інтересу що живуть незалежно від присутності людини.
 # Виникають з pred_error що стабільно не закривається — те що Аніма не може передбачити.
 
+struct CuriosityRefinement
+    flash::Int
+    old_label::String
+    new_label::String
+    pe_at_refinement::Float64
+end
+
 mutable struct CuriosityObject
     id::String
     label::String
@@ -1842,6 +1849,7 @@ mutable struct CuriosityObject
     activation_count::Int
     last_active_flash::Int
     resolved::Bool
+    refinement_history::Vector{CuriosityRefinement}
 end
 
 mutable struct CuriosityRegistry
@@ -1886,6 +1894,7 @@ function update_curiosity!(
             1,
             flash,
             false,
+            CuriosityRefinement[],
         ))
     end
 end
@@ -1902,12 +1911,46 @@ function tick_curiosity!(cr::CuriosityRegistry, flash::Int)
     end
 end
 
-# об'єкт "закрився" — pred_error впав (отримали відповідь)
+# об'єкт "закрився" або уточнився — залежно від глибини падіння pe
+# pe < 0.10  → справді розв'язано, закрити
+# 0.10–0.25  → часткова відповідь: уточнити label із контексту, зберегти в history, не закривати
 # Потребує activation_count >= 2: один флеш — ще не цікавість, а шум
-function resolve_curiosity!(cr::CuriosityRegistry, emotion_ctx::String, pe::Float64)
+function resolve_curiosity!(
+    cr::CuriosityRegistry,
+    emotion_ctx::String,
+    pe::Float64,
+    flash::Int = 0,
+    context::String = "",
+)
     pe > 0.25 && return
     idx = findfirst(o -> o.id == emotion_ctx && !o.resolved, cr.objects)
-    idx !== nothing && cr.objects[idx].activation_count >= 2 && (cr.objects[idx].resolved = true)
+    idx === nothing && return
+    obj = cr.objects[idx]
+    obj.activation_count < 2 && return
+
+    if pe < 0.10
+        obj.resolved = true
+    else
+        # будуємо новий label: якщо є живий контекст — закріплюємо момент уточнення
+        new_label = if length(context) > 5
+            # collect → chars щоб не рвати кириличні символи
+            chars = collect(strip(context))
+            fragment = String(chars[1:min(45, length(chars))])
+            # обрізаємо по останньому пробілу щоб не рвати слово
+            last_sp = findlast(' ', fragment)
+            fragment = last_sp !== nothing && last_sp > 10 ? fragment[1:prevind(fragment, last_sp)] : fragment
+            "$(lowercase(emotion_ctx)): «$(fragment)»"
+        else
+            _curiosity_label(emotion_ctx, pe)
+        end
+
+        if new_label != obj.label
+            push!(obj.refinement_history, CuriosityRefinement(flash, obj.label, new_label, pe))
+            length(obj.refinement_history) > 8 && deleteat!(obj.refinement_history, 1)
+            obj.label = new_label
+        end
+        obj.intensity = clamp01(obj.intensity - (0.25 - pe) * 0.3)
+    end
 end
 
 function _prune_curiosity!(cr::CuriosityRegistry)
@@ -1935,11 +1978,28 @@ function cr_to_json(cr::CuriosityRegistry)
             "activation_count" => o.activation_count,
             "last_active_flash" => o.last_active_flash,
             "resolved" => o.resolved,
+            "refinement_history" => [
+                Dict(
+                    "flash" => r.flash,
+                    "old_label" => r.old_label,
+                    "new_label" => r.new_label,
+                    "pe" => r.pe_at_refinement,
+                ) for r in o.refinement_history
+            ],
         ) for o in cr.objects
     ])
 end
 function cr_from_json!(cr::CuriosityRegistry, d::AbstractDict)
     for od in get(d, "objects", Any[])
+        refs = CuriosityRefinement[]
+        for rd in get(od, "refinement_history", Any[])
+            push!(refs, CuriosityRefinement(
+                Int(rd["flash"]),
+                String(rd["old_label"]),
+                String(rd["new_label"]),
+                Float64(rd["pe"]),
+            ))
+        end
         push!(cr.objects, CuriosityObject(
             String(od["id"]),
             String(od["label"]),
@@ -1949,6 +2009,7 @@ function cr_from_json!(cr::CuriosityRegistry, d::AbstractDict)
             Int(od["activation_count"]),
             Int(od["last_active_flash"]),
             Bool(od["resolved"]),
+            refs,
         ))
     end
 end
