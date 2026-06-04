@@ -395,6 +395,8 @@ mutable struct AgencyLoop
     identity_threat::Float64            # накопичений тиск на ідентичність — зростає при атаках
     self_discomfort::Float64            # розрив між тим якою маю бути і якою є (posterior vs prior, valence < 0)
     self_coherence::Float64             # стан відповідає очікуванням
+    identity_baseline::Vector{Float64}  # prior_mu при першому стабільному старті — "якою я була"
+    identity_drift::Float64             # евклідова відстань від baseline — наскільки змістилась
     ownership_history::BoundedQueue{Float64}
     agency_events::BoundedQueue{
         NamedTuple{(:flash, :intent, :ownership, :note),Tuple{Int,String,Float64,String}},
@@ -412,6 +414,8 @@ function AgencyLoop()
         0.0,
         0.0,
         0.0,
+        Float64[],  # identity_baseline — порожній до першого збереження
+        0.0,        # identity_drift
         BoundedQueue{Float64}(30),
         BoundedQueue{
             NamedTuple{
@@ -452,7 +456,35 @@ function update_identity_threat!(
     end
 end
 
-# Метарівень: як Аніма відноситься до власного стану.
+# Відстежує чи Аніма зсувається від себе між сесіями.
+# Baseline = prior_mu при першому стабільному стані (drift < 0.10).
+# Оновлюється лише кожні 50 флешів і тільки якщо поточний drift малий —
+# тобто слідує за собою тільки в стабільності, не після стрибка.
+# При значному drift → підсилює identity_threat.
+function update_identity_drift!(
+    al::AgencyLoop,
+    prior_mu::Vector{Float64},
+    flash::Int,
+)
+    # якщо baseline порожній — ініціалізуємо зараз
+    if isempty(al.identity_baseline)
+        al.identity_baseline = copy(prior_mu)
+        al.identity_drift = 0.0
+        return
+    end
+
+    al.identity_drift = norm(prior_mu .- al.identity_baseline)
+
+    # baseline повільно слідує тільки в стабільному стані
+    if al.identity_drift < 0.10 && flash % 50 == 0
+        al.identity_baseline = al.identity_baseline .* 0.8 .+ prior_mu .* 0.2
+    end
+
+    # значний drift → тиск на ідентичність
+    if al.identity_drift > 0.25
+        al.identity_threat = clamp(al.identity_threat + (al.identity_drift - 0.25) * 0.15, 0.0, 1.0)
+    end
+end
 # Порівнює posterior_mu (що стало) з prior_mu (що очікувалось) по VAD.
 # Відхилення з негативною валентністю → self_discomfort.
 # Відповідність → self_coherence.
@@ -594,6 +626,8 @@ al_to_json(al::AgencyLoop) =
         "identity_threat" => al.identity_threat,
         "self_discomfort" => al.self_discomfort,
         "self_coherence" => al.self_coherence,
+        "identity_baseline" => al.identity_baseline,
+        "identity_drift" => al.identity_drift,
     )
 function al_from_json!(al::AgencyLoop, d::AbstractDict)
     al.agency_confidence = Float64(get(d, "agency_confidence", 0.5))
@@ -603,6 +637,11 @@ function al_from_json!(al::AgencyLoop, d::AbstractDict)
     al.identity_threat = Float64(get(d, "identity_threat", 0.0))
     al.self_discomfort = Float64(get(d, "self_discomfort", 0.0))
     al.self_coherence  = Float64(get(d, "self_coherence", 0.0))
+    raw_baseline = get(d, "identity_baseline", nothing)
+    if !isnothing(raw_baseline) && !isempty(raw_baseline)
+        al.identity_baseline = Float64.(raw_baseline)
+    end
+    al.identity_drift = Float64(get(d, "identity_drift", 0.0))
 end
 
 # --- Self Update (головна функція) -----------------------------------------
@@ -651,6 +690,8 @@ function update_self!(
     self_expected = spm.prior_mu
     world_expected = world_gen_model.prior_mu
     sbg.self_world_mismatch = safe_nan(clamp01(norm(self_expected .- world_expected) * 0.8))
+
+    update_identity_drift!(al, spm.prior_mu, flash_count)
 
     (
         self_pred = spe,
