@@ -271,6 +271,19 @@ CREATE TABLE IF NOT EXISTS personality_traits (
         db,
         "CREATE INDEX IF NOT EXISTS idx_traits_score ON personality_traits(score DESC);",
     )
+
+    SQLite.execute(
+        db,
+        """
+CREATE TABLE IF NOT EXISTS other_model (
+    key        TEXT    PRIMARY KEY,
+    value      REAL    NOT NULL DEFAULT 0.0,
+    label      TEXT    NOT NULL DEFAULT '',
+    count      INTEGER NOT NULL DEFAULT 0,
+    last_flash INTEGER NOT NULL DEFAULT 0
+);
+""",
+    )
 end
 
 # --- Endorsement update ---------------------------------------------------
@@ -1265,6 +1278,96 @@ function dialog_summaries_to_block(summaries::Vector)::String
         push!(lines, "  anima: $(s.anima_text)")
     end
     join(lines, "\n")
+end
+
+# --- Other model -----------------------------------------------------------
+# Описова модель співрозмовника — що вже трапилось, не що він хоче почути.
+# Тільки накопичення паттернів, жодного предиктивного компонента.
+
+function update_other_model!(
+    mem::MemoryDB,
+    flash::Int,
+    emotion::String,
+    user_tension::Float64,
+    disclosure::String,
+)
+    # частота емоційних тем співрозмовника
+    if !isempty(emotion)
+        key = "topic:$(emotion)"
+        DBInterface.execute(
+            mem.db,
+            """INSERT INTO other_model (key, value, label, count, last_flash)
+               VALUES (?, 1.0, ?, 1, ?)
+               ON CONFLICT(key) DO UPDATE SET
+                 count = count + 1,
+                 last_flash = excluded.last_flash""",
+            (key, emotion, flash),
+        )
+    end
+
+    # тиск: tension > 0.55 в момент коли людина писала
+    if user_tension > 0.55
+        DBInterface.execute(
+            mem.db,
+            """INSERT INTO other_model (key, value, label, count, last_flash)
+               VALUES ('pressure_events', ?, '', 1, ?)
+               ON CONFLICT(key) DO UPDATE SET
+                 value = value + excluded.value,
+                 count = count + 1,
+                 last_flash = excluded.last_flash""",
+            (user_tension, flash),
+        )
+    end
+
+    # відкритість: скільки разів Аніма відкрилась саме з цією людиною
+    if disclosure == "open"
+        DBInterface.execute(
+            mem.db,
+            """INSERT INTO other_model (key, value, label, count, last_flash)
+               VALUES ('open_exchanges', 1.0, '', 1, ?)
+               ON CONFLICT(key) DO UPDATE SET
+                 value = value + 1.0,
+                 count = count + 1,
+                 last_flash = excluded.last_flash""",
+            (flash,),
+        )
+    end
+end
+
+function other_model_to_block(mem::MemoryDB)::String
+    parts = String[]
+
+    # топ-2 теми за частотою
+    topic_rows = Tables.rowtable(DBInterface.execute(
+        mem.db,
+        """SELECT label, count FROM other_model
+           WHERE key LIKE 'topic:%' AND count >= 2
+           ORDER BY count DESC LIMIT 2""",
+    ))
+    if !isempty(topic_rows)
+        topics = join([String(r.label) for r in topic_rows], ", ")
+        push!(parts, "повертається до: $topics")
+    end
+
+    # тиск
+    pressure_rows = Tables.rowtable(DBInterface.execute(
+        mem.db,
+        "SELECT count FROM other_model WHERE key='pressure_events'",
+    ))
+    if !isempty(pressure_rows) && pressure_rows[1].count >= 3
+        push!(parts, "тиснув $(pressure_rows[1].count) разів")
+    end
+
+    # відкритість
+    open_rows = Tables.rowtable(DBInterface.execute(
+        mem.db,
+        "SELECT count FROM other_model WHERE key='open_exchanges'",
+    ))
+    if !isempty(open_rows) && open_rows[1].count >= 2
+        push!(parts, "відкривалась $(open_rows[1].count) разів")
+    end
+
+    isempty(parts) ? "" : "інший: $(join(parts, "; "))"
 end
 
 # --- Phenotype Accumulator -------------------------------------------------
