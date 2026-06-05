@@ -1714,6 +1714,14 @@ function build_identity_block(a::Anima, mem_db = nothing)::String
             ;
         end
 
+        # інший: описова модель співрозмовника — паттерни що вже трапились
+        try
+            other_block = other_model_to_block(mem_db)
+            isempty(other_block) || push!(lines, other_block)
+        catch
+            ;
+        end
+
         # endorsed: що Аніма визнає своїм — епізоди де слова збіглись зі станом
         try
             end_rows = Tables.rowtable(DBInterface.execute(
@@ -2386,9 +2394,11 @@ function llm_async(
                     continue
                 end
                 data = JSON3.read(resp.body)
-                text =
-                    _is_ollama ? String(data["message"]["content"]) :
-                    String(data["choices"][1]["message"]["content"])
+                _raw_content =
+                    _is_ollama ? data["message"]["content"] :
+                    data["choices"][1]["message"]["content"]
+                isnothing(_raw_content) && error("LLM повернув content=nothing")
+                text = String(_raw_content)
                 put!(ch, text)
                 last_err = nothing
                 break
