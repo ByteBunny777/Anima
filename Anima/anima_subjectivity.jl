@@ -804,11 +804,11 @@ function _update_stance!(
     surprise_amp = 1.0 + surprise * 0.5
     valence_delta = actual_valence * SUBJ_STANCE_LEARN_RATE * surprise_amp
 
-    DBInterface.execute(db, "BEGIN TRANSACTION")
     try
-        DBInterface.execute(
-            db,
-            """
+        SQLite.transaction(db) do
+            DBInterface.execute(
+                db,
+                """
 INSERT INTO positional_stances
     (stance_key, valence_stance, certainty, avoidance_weight,
      approach_weight, encounter_count, last_updated)
@@ -822,21 +822,20 @@ ON CONFLICT(stance_key) DO UPDATE SET
     encounter_count  = encounter_count + 1,
     last_updated     = ?
 """,
-            (
-                stance_key,
-                clamp(valence_delta, -1.0, 1.0),
-                clamp(avoidance * surprise_amp, 0.0, 0.3),
-                clamp(approach * surprise_amp, 0.0, 0.3),
-                flash,
-                valence_delta,
-                clamp(avoidance * surprise_amp, 0.0, 0.1),
-                clamp(approach * surprise_amp, 0.0, 0.1),
-                flash,
-            ),
-        )
-        DBInterface.execute(db, "COMMIT")
+                (
+                    stance_key,
+                    clamp(valence_delta, -1.0, 1.0),
+                    clamp(avoidance * surprise_amp, 0.0, 0.3),
+                    clamp(approach * surprise_amp, 0.0, 0.3),
+                    flash,
+                    valence_delta,
+                    clamp(avoidance * surprise_amp, 0.0, 0.1),
+                    clamp(approach * surprise_amp, 0.0, 0.1),
+                    flash,
+                ),
+            )
+        end
     catch e
-        DBInterface.execute(db, "ROLLBACK")
         @warn "[SUBJ] stance update помилка: $e"
     end
 
@@ -858,48 +857,47 @@ function _check_belief_resonance!(
 )
     db = subj.mem.db
 
-    DBInterface.execute(db, "BEGIN TRANSACTION")
     try
-        for eb in subj._emerged_cache
-            dist =
-                (
-                    abs(eb.centroid_arousal - actual_arousal) +
-                    abs(eb.centroid_valence - actual_valence) +
-                    abs(eb.centroid_tension - actual_tension)
-                ) / 3.0
-            dist > eb.activation_thr && continue
+        SQLite.transaction(db) do
+            for eb in subj._emerged_cache
+                dist =
+                    (
+                        abs(eb.centroid_arousal - actual_arousal) +
+                        abs(eb.centroid_valence - actual_valence) +
+                        abs(eb.centroid_tension - actual_tension)
+                    ) / 3.0
+                dist > eb.activation_thr && continue
 
-            strength_delta = 0.008 * (1.0 - dist / eb.activation_thr)
+                strength_delta = 0.008 * (1.0 - dist / eb.activation_thr)
 
-            if eb.valence_bias * actual_valence < -0.1
-                DBInterface.execute(
-                    db,
-                    """
+                if eb.valence_bias * actual_valence < -0.1
+                    DBInterface.execute(
+                        db,
+                        """
 UPDATE emerged_beliefs
 SET contradictions = contradictions + 1,
     strength = MAX(0.05, strength - 0.015),
     last_activated = ?
 WHERE key = ?
 """,
-                    (flash, eb.key),
-                )
-            else
-                DBInterface.execute(
-                    db,
-                    """
+                        (flash, eb.key),
+                    )
+                else
+                    DBInterface.execute(
+                        db,
+                        """
 UPDATE emerged_beliefs
 SET confirmations = confirmations + 1,
     strength = MIN(0.95, strength + ?),
     last_activated = ?
 WHERE key = ?
 """,
-                    (strength_delta, flash, eb.key),
-                )
+                        (strength_delta, flash, eb.key),
+                    )
+                end
             end
         end
-        DBInterface.execute(db, "COMMIT")
     catch e
-        DBInterface.execute(db, "ROLLBACK")
         @warn "[SUBJ] belief resonance помилка: $e"
     end
 
