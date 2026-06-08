@@ -520,10 +520,10 @@ repl_with_background!(anima;
     subj            = subj,
     use_llm         = true,
     llm_url         = "https://openrouter.ai/api/v1/chat/completions",
-    llm_model       = get(ENV, "ANIMA_LLM_MODEL", "openai/gpt-oss-120b:free"),
+    llm_model       = get(ENV, "ANIMA_LLM_MODEL", "anthropic/claude-haiku-4.5"),
     llm_key         = get(ENV, "OPENROUTER_API_KEY", ""),
     use_input_llm   = true,
-    input_llm_model = get(ENV, "ANIMA_INPUT_LLM_MODEL", get(ENV, "ANIMA_LLM_MODEL", "openai/gpt-oss-120b:free")),
+    input_llm_model = get(ENV, "ANIMA_INPUT_LLM_MODEL", get(ENV, "ANIMA_LLM_MODEL", "anthropic/claude-haiku-4.5")),
     input_llm_key   = get(ENV, "OPENROUTER_API_KEY_INPUT", get(ENV, "OPENROUTER_API_KEY", "")))
 ```
 
