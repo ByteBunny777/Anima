@@ -284,6 +284,29 @@ CREATE TABLE IF NOT EXISTS other_model (
 );
 """,
     )
+
+    SQLite.execute(
+        db,
+        """
+CREATE TABLE IF NOT EXISTS audit_log (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    flash            INTEGER NOT NULL,
+    timestamp        REAL    NOT NULL,
+    causal_necessary INTEGER NOT NULL DEFAULT 0,
+    memory_indep     INTEGER NOT NULL DEFAULT 0,
+    stake_present    INTEGER NOT NULL DEFAULT 0,
+    irreversible     INTEGER NOT NULL DEFAULT 0,
+    self_recognized  INTEGER NOT NULL DEFAULT 0,
+    audit_score      REAL    NOT NULL DEFAULT 0.0,
+    causal_ownership REAL    NOT NULL DEFAULT 0.0,
+    endorsed         TEXT    NOT NULL DEFAULT 'automatic'
+);
+""",
+    )
+    SQLite.execute(
+        db,
+        "CREATE INDEX IF NOT EXISTS idx_audit_flash ON audit_log(flash DESC);",
+    )
 end
 
 # --- Endorsement update ---------------------------------------------------
