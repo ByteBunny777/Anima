@@ -376,7 +376,7 @@ function Anima(;
     end
 
     _narrative_path = anima_state_file(psyche_mem_path, "narrative")
-    a.narrative_snap = load_narrative(_narrative_path)
+    a.narrative_snap = load_narrative(_narrative_path, a.flash_count)
     init_session!(a.temporal)
     apply_to_nt!(a.temporal, a.nt)
     # Перевірка конфліктів між сесіями
@@ -481,6 +481,25 @@ function save!(a::Anima; summary = "", verbose = false)
             "signal"      => intent_signal,
             "saved_flash" => a.flash_count,
         )
+
+        # formed_thought: якщо curiosity достатньо визрів — формулюємо думку
+        # що "склалась" поки не говорили. Детерміністично з реального стану.
+        if curiosity_active && top_co.intensity > 0.45
+            _rh = top_co.refinement_history
+            _thought = if length(_rh) >= 2
+                "Поки тебе не було, я думала про \"$(top_co.label)\". " *
+                "Питання пройшло через $(length(_rh)) уточнень — " *
+                "починалось як \"$(_rh[1].old_label)\", тепер стало конкретнішим."
+            elseif length(_rh) == 1
+                "Поки тебе не було, я думала про \"$(top_co.label)\". " *
+                "Воно змінилось — раніше це було \"$(_rh[1].old_label)\"."
+            else
+                "Поки тебе не було, я думала про \"$(top_co.label)\". " *
+                "Це питання не закрилось."
+            end
+            intent_data["formed_thought"] = _thought
+            intent_data["formed_thought_intensity"] = top_co.intensity
+        end
         intent_dir = dirname(intent_path)
         isempty(intent_dir) || isdir(intent_dir) || mkpath(intent_dir)
         open(intent_path, "w") do f
@@ -562,6 +581,36 @@ function apply_recall_ignition!(a::Anima, hit::NamedTuple)
             clamp(a.interoception.allostatic_load + abs(somatic_echo) * 0.5, 0.0, 1.0)
     end
 end
+
+# --- CausalTrace ------------------------------------------------------
+# Частковий ланцюг із experience!: stimulus → memory_bias → NT → conflict → intent → policy.
+# speech / self_hear / endorsed заповнюються в anima_background.jl після LLM.
+mutable struct CausalTrace
+    flash::Int
+    timestamp::Float64
+    stimulus_keys::String       # ключі стимулу через кому — що прийшло ззовні
+    memory_bias::Float64        # скільки пам'ять додала до стимулу (норма mem_d)
+    nt_serotonin::Float64
+    nt_dopamine::Float64
+    nt_noradrenaline::Float64
+    phi::Float64
+    gc_tension::Float64
+    intent_goal::String
+    intent_strength::Float64
+    policy_drive::String
+    # заповнюється в background:
+    speech_length::Int
+    self_hear_mismatch::Float64
+    endorsed::String
+    causal_ownership::Float64
+end
+
+CausalTrace(flash::Int) = CausalTrace(
+    flash, time(), "", 0.0,
+    0.0, 0.0, 0.0, 0.0, 0.0,
+    "", 0.0, "",
+    0, 0.0, "", 0.0,
+)
 
 # --- experience! ------------------------------------------------------
 function experience!(
@@ -774,6 +823,7 @@ function experience!(
 
     # Recall ignition: перевіряємо чи поточний стан резонує з важким спогадом
     # Якщо так — спогад реально збурює prior і увагу, не тільки з'являється в контексті LLM
+    _had_ignition = false
     if !isnothing(mem)
         try
             _ign_vec = state_to_vec(
@@ -787,6 +837,7 @@ function experience!(
             )
             if !isempty(_ign_hits) && _ign_hits[1].ignition
                 apply_recall_ignition!(a, _ign_hits[1])
+                _had_ignition = true
             end
         catch _e
             @warn "[IGNITION] recall: $_e"
@@ -881,6 +932,20 @@ function experience!(
     end
 
     policy = select_policy(a.gen_model, vad)
+
+    # CausalTrace: фіксуємо ланцюг до speech (решта в background)
+    _ctrace = CausalTrace(a.flash_count)
+    _ctrace.stimulus_keys    = join(sort(collect(keys(stimulus_raw))), ",")
+    _ctrace.memory_bias      = Float64(norm(collect(values(mem_d))))
+    _ctrace.nt_serotonin     = Float64(a.nt.serotonin)
+    _ctrace.nt_dopamine      = Float64(a.nt.dopamine)
+    _ctrace.nt_noradrenaline = Float64(a.nt.noradrenaline)
+    _ctrace.phi              = phi
+    _ctrace.gc_tension       = Float64(a.goal_conflict.tension)
+    _ctrace.intent_goal      = isnothing(intent) ? "" : String(intent.goal)
+    _ctrace.intent_strength  = isnothing(intent) ? 0.0 : Float64(intent.strength)
+    _ctrace.policy_drive     = String(policy.drive)
+
     update_blanket!(a.blanket, t_adj, a_r, s_adj, c_adj)
     homeo_snap = update_homeostasis!(a.homeostasis, vad)
 
@@ -1233,6 +1298,7 @@ function experience!(
         regression = (level = a.regression.level, active = a.regression.active),
         temporal = to_snapshot(a.temporal),
         mem_resonance = mem_res,
+        had_ignition = _had_ignition,
         self_pred_error = self_snap.self_pred.error,
         self_agency = self_snap.agency.causal_ownership,
         sbg_stability = self_snap.sbg.attractor_stability,
@@ -1267,6 +1333,7 @@ function experience!(
             id_snap,
             sr_snap,
         ),
+        causal_trace = _ctrace,
     )
 
     log_flash(result)
