@@ -154,7 +154,7 @@ function should_update_narrative(
     belief_fingerprint::String,
 )::Bool
     snap.flash == 0 && return true
-    flash - snap.flash < NARRATIVE_MIN_FLASHES && return false
+    flash - snap.flash < NARRATIVE_MIN_FLASHES && flash > snap.flash && return false
     abs(phi_mean - snap.phi_mean) > NARRATIVE_PHI_DELTA && return true
     abs(stability - snap.stability) > NARRATIVE_STAB_DELTA && return true
     belief_fingerprint != snap.belief_fingerprint && return true
@@ -239,12 +239,15 @@ end
 
 # --- Завантаження поточного стану з JSON --------------------------------------
 
-function load_narrative(json_path::String)::NarrativeSnapshot
+function load_narrative(json_path::String, current_flash::Int = 0)::NarrativeSnapshot
     isfile(json_path) || return NarrativeSnapshot()
     try
         d = JSON3.read(read(json_path, String))
+        saved_flash = Int(get(d, :flash, 0))
+        # flash з іншої версії або старого запуску — скидаємо щоб тригернути оновлення
+        effective_flash = (current_flash > 0 && saved_flash > current_flash) ? 0 : saved_flash
         NarrativeSnapshot(
-            Int(get(d, :flash, 0)),
+            effective_flash,
             Float64(get(d, :timestamp, 0.0)),
             String(get(d, :core, "")),
             String(get(d, :trajectory, "")),
