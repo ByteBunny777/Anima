@@ -2334,6 +2334,135 @@ function af_from_json!(af::AttentionFocus, d::AbstractDict)
     af.attention_schema = String(get(d, "attention_schema", ""))
 end
 
+# --- Meta-Arbitration Layer (MAL) -----------------------------------------
+# Чиста функція пріоритету: серед усіх активних сигналів тиску визначає
+# який цикл зараз "виграє" увагу/ініціативу. Не вирішує ЗМІСТ відповіді —
+# тільки ЯКИЙ механізм зараз має сигнальну перевагу.
+# Transient: не зберігається в Anima між тіками. CausalTrace логує результат
+# як immutable подію. Програші не зникають — decay + persistence
+# через agency.signal_carryover (inhibitory carryover).
+
+struct ArbitrationResult
+    dominant_loop::Symbol      # :curiosity, :identity, :latent, :goal_conflict, :social, :default
+    regime::Symbol             # :hard, :soft, :default
+    score::Float64             # score переможця
+    runner_up::Symbol          # другий за силою сигнал
+    runner_up_score::Float64
+    determinant::String        # короткий опис конкретного об'єкта-визначника
+end
+
+# Ваги сигналів. identity_threat має пріоритетну вагу — захист цілісності
+# структурно важливіший за цікавість чи соціальну потребу.
+const _MAL_WEIGHTS = Dict(
+    :identity     => 1.5,
+    :curiosity    => 1.0,
+    :latent       => 1.0,
+    :goal_conflict=> 1.0,
+    :social       => 1.0,
+    :chronic_cost => 1.0,
+)
+
+# Carryover: decay 0.85/тік, leak від нового score переможця не додається —
+# тільки накопичення програшів. Cap 1.0 щоб не зростав необмежено.
+function _update_carryover!(carryover::Dict{Symbol,Float64}, scores::Dict{Symbol,Float64}, winner::Symbol)
+    for (loop, sc) in scores
+        prev = get(carryover, loop, 0.0)
+        if loop == winner
+            carryover[loop] = clamp(prev * 0.85, 0.0, 1.0)
+        else
+            carryover[loop] = clamp(max(prev * 0.85, sc * 0.3), 0.0, 1.0)
+        end
+    end
+end
+
+function compute_arbitration(a)::ArbitrationResult
+    carryover = a.agency.signal_carryover
+
+    # --- curiosity pressure: top CuriosityObject pred_error/intensity
+    top_co = top_curiosity(a.curiosity_registry)
+    curiosity_score = isnothing(top_co) ? 0.0 : Float64(top_co.intensity)
+    curiosity_det = isnothing(top_co) ? "" : top_co.label
+
+    # --- identity threat (× 1.5, захист пріоритетний)
+    identity_score = Float64(a.agency.identity_threat)
+    identity_det = "identity_threat=$(round(identity_score, digits=2))"
+
+    # --- latent buffer: максимальний компонент
+    lb = a.latent_buffer
+    _lb_vals = Dict(:doubt=>lb.doubt, :shame=>lb.shame, :attachment=>lb.attachment, :threat=>lb.threat)
+    lb_dom = argmax(_lb_vals)
+    latent_score = Float64(_lb_vals[lb_dom])
+    latent_det = "lb.$(lb_dom)=$(round(latent_score, digits=2))"
+
+    # --- goal conflict tension
+    gc_score = Float64(a.goal_conflict.tension)
+    gc_det = !isempty(a.goal_conflict.need_a) ?
+        "$(a.goal_conflict.need_a) vs $(a.goal_conflict.need_b)" : "goal_conflict"
+
+    # --- chronic cost: фіксований буст якщо хронічно низький serotonin
+    chronic_score = a.agency.chronic_low_serotonin >= 5 ? 0.6 : 0.0
+    chronic_det = "chronic_low_serotonin=$(a.agency.chronic_low_serotonin)"
+
+    # --- social need
+    social_score = Float64(a.sig_layer.contact_need)
+    social_det = "contact_need=$(round(social_score, digits=2))"
+
+    raw_scores = Dict(
+        :curiosity     => curiosity_score,
+        :identity      => identity_score,
+        :latent        => latent_score,
+        :goal_conflict => gc_score,
+        :chronic_cost  => chronic_score,
+        :social        => social_score,
+    )
+
+    # Зважені скори + inhibitory carryover (програші минулих тіків додають фон)
+    weighted_scores = Dict{Symbol,Float64}()
+    for (loop, sc) in raw_scores
+        w = get(_MAL_WEIGHTS, loop, 1.0)
+        co = get(carryover, loop, 0.0)
+        weighted_scores[loop] = clamp01(sc * w + co * 0.3)
+    end
+
+    determinants = Dict(
+        :curiosity     => curiosity_det,
+        :identity      => identity_det,
+        :latent        => latent_det,
+        :goal_conflict => gc_det,
+        :chronic_cost  => chronic_det,
+        :social        => social_det,
+    )
+
+    sorted_loops = sort(collect(weighted_scores), by = kv -> -kv[2])
+    winner, winner_score = sorted_loops[1]
+    runner_up, runner_up_score = sorted_loops[2]
+
+    # Soft dominance regime: ratio winner/runner_up визначає режим
+    ratio = runner_up_score > 1e-6 ? winner_score / runner_up_score : Inf
+    if winner_score < 0.05
+        regime = :default
+        dominant = :default
+        det = "немає активного сигналу"
+    elseif ratio > 1.5
+        regime = :hard
+        dominant = winner
+        det = determinants[winner]
+    elseif ratio > 1.2
+        regime = :soft
+        dominant = winner
+        det = determinants[winner]
+    else
+        regime = :default
+        dominant = :default
+        det = "конкуренція: $(winner) vs $(runner_up)"
+    end
+
+    _update_carryover!(carryover, weighted_scores, winner)
+
+    ArbitrationResult(dominant, regime, winner_score, runner_up, runner_up_score, det)
+end
+
+
 # --- AestheticSense -------------------------------------------------------
 # Естетичний слід: не "що красиво" як концепт, а відбиток стану
 # в момент високої інтеграції. φ × valence × significance > поріг → слід зберігається.
