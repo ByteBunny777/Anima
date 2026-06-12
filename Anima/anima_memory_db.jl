@@ -325,6 +325,10 @@ CREATE TABLE IF NOT EXISTS causal_trace (
     intent_goal      TEXT    NOT NULL DEFAULT '',
     intent_strength  REAL    NOT NULL DEFAULT 0.0,
     policy_drive     TEXT    NOT NULL DEFAULT '',
+    mal_dominant     TEXT    NOT NULL DEFAULT '',
+    mal_regime       TEXT    NOT NULL DEFAULT '',
+    mal_score        REAL    NOT NULL DEFAULT 0.0,
+    mal_determinant  TEXT    NOT NULL DEFAULT '',
     speech_length    INTEGER NOT NULL DEFAULT 0,
     self_hear_mismatch REAL  NOT NULL DEFAULT 0.0,
     endorsed         TEXT    NOT NULL DEFAULT '',
@@ -336,6 +340,27 @@ CREATE TABLE IF NOT EXISTS causal_trace (
         db,
         "CREATE INDEX IF NOT EXISTS idx_ctrace_flash ON causal_trace(flash DESC);",
     )
+
+    # Міграція: causal_trace могла існувати до MAL (без mal_* колонок).
+    # CREATE TABLE IF NOT EXISTS вище не додає колонки до існуючої таблиці —
+    # додаємо їх вручну, ідемпотентно.
+    let existing_cols = Set(
+            String(NamedTuple(row).name) for row in
+            DBInterface.execute(db, "PRAGMA table_info(causal_trace);")
+        )
+        _mal_migrations = (
+            ("mal_dominant",    "TEXT NOT NULL DEFAULT ''"),
+            ("mal_regime",      "TEXT NOT NULL DEFAULT ''"),
+            ("mal_score",       "REAL NOT NULL DEFAULT 0.0"),
+            ("mal_determinant", "TEXT NOT NULL DEFAULT ''"),
+        )
+        for (col, decl) in _mal_migrations
+            if !(col in existing_cols)
+                SQLite.execute(db, "ALTER TABLE causal_trace ADD COLUMN $col $decl;")
+                @info "[MIGRATION] causal_trace: додано колонку $col"
+            end
+        end
+    end
 end
 
 # --- CausalTrace ----------------------------------------------------------
@@ -347,8 +372,9 @@ function save_causal_trace!(db::SQLite.DB, trace::NamedTuple)
            (flash, timestamp, stimulus_keys, memory_bias,
             nt_serotonin, nt_dopamine, nt_noradrenaline,
             phi, gc_tension, intent_goal, intent_strength, policy_drive,
+            mal_dominant, mal_regime, mal_score, mal_determinant,
             speech_length, self_hear_mismatch, endorsed, causal_ownership)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             trace.flash,
             trace.timestamp,
@@ -362,6 +388,10 @@ function save_causal_trace!(db::SQLite.DB, trace::NamedTuple)
             trace.intent_goal,
             trace.intent_strength,
             trace.policy_drive,
+            trace.mal_dominant,
+            trace.mal_regime,
+            trace.mal_score,
+            trace.mal_determinant,
             trace.speech_length,
             trace.self_hear_mismatch,
             trace.endorsed,
