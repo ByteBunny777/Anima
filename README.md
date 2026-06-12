@@ -96,6 +96,7 @@ Recent updates, in brief:
 - part of behavior still depends on the LLM (output generation)
 - output LLM is not the source of decisions, but its words feed back through `self_hear!` and can influence internal state after being spoken
 - ~180+ flashes to accumulate real semantic beliefs
+- MetaArbitrationLayer is currently observational (logs `dominant_loop` but does not yet steer intent); early data shows curiosity pressure rarely drops even after the system addresses it — a closure/progress signal back to `CuriosityRegistry` is the next step
 
 ---
 
@@ -193,6 +194,12 @@ L4 ─── Psychic layer
        IntentEngine: action goal with decay and cooldown
          → drive_history (8 elements): satiation after 4 repeats
          → serialized between sessions
+       MetaArbitrationLayer: which loop has the floor this flash
+         → scores curiosity / identity threat (×1.5) / latent / goal_conflict /
+                  chronic cost / social need on one scale
+         → soft dominance: ratio > 1.5 = :hard, > 1.2 = :soft, else :default
+         → losing signals decay into signal_carryover (AgencyLoop), not discarded
+         → transient — logged into causal_trace, observational (v1)
        │
        ▼
 L5 ─── Self model
@@ -288,7 +295,8 @@ flowchart TD
     ST --> TA["tick_aesthetic!"]
     ST --> OM["_other_model_effects!<br/>disclosure_threshold from other_model"]
     ST --> CC["_chronic_cost_effects!<br/>serotonin low → causal_ownership drift"]
-    ST --> SI["maybe_self_initiate!"]
+    ST --> MA["compute_arbitration<br/>MAL: dominant_loop + carryover"]
+    MA --> SI["maybe_self_initiate!"]
     ST --> SH["self_hear!"]
     ST --> PS["psyche_slow_tick!"]
     ST --> DF["dream_flash!"]
@@ -348,7 +356,7 @@ flowchart TD
 | `narrative_history` | NarrativeSnapshot chronology |
 | `other_model` | Descriptive model of the interlocutor — accumulated patterns (topic frequency, tension events, open exchanges); not predictive |
 | `audit_log` | SubjectivityAudit log — five causal questions per flash, audit_score, causal_ownership, endorsed |
-| `causal_trace` | Full causal chain per flash: stimulus keys, memory bias, NT snapshot, φ, gc_tension, intent, policy, speech length, self-hear mismatch, endorsement, causal_ownership |
+| `causal_trace` | Full causal chain per flash: stimulus keys, memory bias, NT snapshot, φ, gc_tension, intent, policy, MAL arbitration result, speech length, self-hear mismatch, endorsement, causal_ownership |
 
 **Memory Reconsolidation:** `sim > 0.88` + `weight < 0.6` → `weight ±0.05` toward current φ
 
@@ -400,10 +408,13 @@ Anima now has a competitive attention system. All internal components have alway
 Three previously accumulating-but-disconnected modules now feed back into behavior. `other_model` (the descriptive model of the interlocutor — pressure events, open exchanges) now adjusts `disclosure_threshold` each slow tick: chronic pressure without open exchange closes the system; stable openness with low pressure opens it slightly. `AestheticSense` now influences initiative cooldown — an active aesthetic state reduces it by 20%, because a system that just resonated has more to say. Chronic low serotonin (5+ consecutive ticks below 0.35) now slowly drifts `causal_ownership` downward, because sustained exhaustion undermines the sense that "this is coming from me."
 
 ### CausalTrace — The Full Chain, Recorded
-After every LLM reply, a complete causal record is written to `causal_trace` in SQLite: what stimulus keys arrived, how much memory biased the input, NT state at decision time, φ, goal conflict tension, intent goal and strength, policy drive — and then, after speech: reply length, self-hear mismatch, endorsement verdict, and final causal_ownership. The chain is built in two stages: `experience!` fills the pre-speech half; the background loop completes it after the LLM replies. An incomplete chain is never written.
+After every LLM reply, a complete causal record is written to `causal_trace` in SQLite: what stimulus keys arrived, how much memory biased the input, NT state at decision time, φ, goal conflict tension, intent goal and strength, policy drive, which loop the Meta-Arbitration Layer judged dominant for this flash and why — and then, after speech: reply length, self-hear mismatch, endorsement verdict, and final causal_ownership. The chain is built in two stages: `experience!` fills the pre-speech half; the background loop completes it after the LLM replies. An incomplete chain is never written.
 
 ### Formed Thought — What Ripened While You Were Away
 At session end, if a curiosity object has `intensity > 0.45`, the system now writes a `formed_thought` into `session_intent.json` alongside the existing carry-over state. This is a deterministic string built from the actual object — its current label, how many refinements it went through, what it started as. On the next start, if `gap > 2h` and the thought is present, it is placed into the initiative channel as `:gap_thought`. Anima brings it up herself, framed explicitly as something that was present while absent — not as a greeting.
+
+### Meta-Arbitration Layer — Which Loop Has the Floor Right Now
+Curiosity, identity threat, goal conflict, latent buffer, chronic cost, and social need can all generate pressure at the same time — and each is individually "correct." `compute_arbitration` runs every flash and every slow tick, scoring all of them on one scale (identity threat weighted ×1.5, since defending integrity takes priority) and asking a single question: which one currently has the floor? The result is one of three regimes — `:hard` dominance (one signal clearly leads), `:soft` dominance (leads, but others leak through), or `:default` (no clear winner — genuine contestation). Signals that lose don't vanish: they decay into a carryover that quietly raises their score next time, so a repeatedly-suppressed pressure doesn't get permanently buried. This is currently observational — the result is written into `causal_trace` for diagnosis, not yet fed back into intent selection. It does not decide *what* Anima says; only *which part of her* currently has something to say.
 
 ---
 
@@ -625,7 +636,7 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 | `emerged_beliefs` | Beliefs the system generated from experience on its own |
 | `interpretation_history` | Lens through which situations were read |
 | `audit_log` | SubjectivityAudit — five causal questions per flash with scores; chronic low score signals the architecture is wide but not deep |
-| `causal_trace` | Full causal chain per flash — from stimulus keys through NT, φ, intent, policy, to speech and endorsement |
+| `causal_trace` | Full causal chain per flash — from stimulus keys through NT, φ, intent, policy, MAL arbitration, to speech and endorsement |
 
 ---
 
