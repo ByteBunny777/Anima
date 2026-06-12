@@ -14,7 +14,10 @@
 # Хронічно низький score → архітектура широка але не глибока.
 #
 # Залежить від: anima_interface.jl (Anima, evaluate_endorsement)
-# Пам'ять: anima_memory_db.jl (таблиця audit_log, додана через _init_audit_table!)
+# Пам'ять: anima_memory_db.jl — таблиці audit_log і causal_trace
+# створюються напряму в _init_schema!. Функція _init_audit_table!
+# нижче історично не викликається (схема вже інлайн в _init_schema!) —
+# залишена як довідкова документація схеми audit_log.
 
 # --- Структура результату --------------------------------------------------
 
@@ -59,6 +62,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
         "CREATE INDEX IF NOT EXISTS idx_audit_flash ON audit_log(flash DESC);",
     )
 end
+
+# Примітка: таблиця causal_trace, _init_causal_trace_table! та save_causal_trace!
+# визначені в anima_memory_db.jl (_init_schema!) — там реальний шлях ініціалізації
+# БД при кожному старті. Сюди їх не дублюємо.
 
 # --- Обчислення аудиту -----------------------------------------------------
 
