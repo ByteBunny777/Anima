@@ -1871,6 +1871,7 @@ mutable struct CuriosityObject
     last_active_flash::Int
     resolved::Bool
     refinement_history::Vector{CuriosityRefinement}
+    consecutive_progress::Int  # послідовні progress_signal без churn-розриву
 end
 
 mutable struct CuriosityRegistry
@@ -1916,6 +1917,7 @@ function update_curiosity!(
             flash,
             false,
             CuriosityRefinement[],
+            0,
         ))
     end
 end
@@ -1988,6 +1990,29 @@ function top_curiosity(cr::CuriosityRegistry)::Union{CuriosityObject,Nothing}
     active[argmax(map(o -> o.intensity, active))]
 end
 
+# --- Curiosity Closure Signal (v1) ----------------------------------------
+# Петля Curiosity → Behavior → Endorsement → Progress → Curiosity Update.
+# progress_signal обчислюється в anima_background.jl (потребує endorsed,
+# causal_necessary з audit) і застосовується тут до конкретного об'єкту.
+
+# чи є об'єкт, на якому в принципі може статись прогрес цього флешу
+function is_progress_eligible(co::Union{CuriosityObject,Nothing})::Bool
+    co !== nothing && !co.resolved
+end
+
+# відповідь резонувала з активним curiosity і реально просунула його:
+# поступове згасання intensity, без миттєвого resolved.
+function apply_progress!(obj::CuriosityObject)
+    obj.intensity = clamp01(obj.intensity * 0.85)
+    obj.consecutive_progress += 1
+end
+
+# тема змінилась (label churn), але реального просування не зафіксовано —
+# рвемо ланцюжок consecutive_progress, intensity не торкаємось.
+function apply_churn!(obj::CuriosityObject)
+    obj.consecutive_progress = 0
+end
+
 function cr_to_json(cr::CuriosityRegistry)
     Dict("objects" => [
         Dict(
@@ -1999,6 +2024,7 @@ function cr_to_json(cr::CuriosityRegistry)
             "activation_count" => o.activation_count,
             "last_active_flash" => o.last_active_flash,
             "resolved" => o.resolved,
+            "consecutive_progress" => o.consecutive_progress,
             "refinement_history" => [
                 Dict(
                     "flash" => r.flash,
@@ -2031,6 +2057,7 @@ function cr_from_json!(cr::CuriosityRegistry, d::AbstractDict)
             Int(od["last_active_flash"]),
             Bool(od["resolved"]),
             refs,
+            Int(get(od, "consecutive_progress", 0)),
         ))
     end
 end
@@ -2349,6 +2376,7 @@ struct ArbitrationResult
     runner_up::Symbol          # другий за силою сигнал
     runner_up_score::Float64
     determinant::String        # короткий опис конкретного об'єкта-визначника
+    loop_scores::Dict{Symbol,Float64}  # weighted_scores усіх loops (діагностика clamp/carryover)
 end
 
 # Ваги сигналів. identity_threat має пріоритетну вагу — захист цілісності
@@ -2360,6 +2388,18 @@ const _MAL_WEIGHTS = Dict(
     :goal_conflict=> 1.0,
     :social       => 1.0,
     :chronic_cost => 1.0,
+)
+
+# MAL → Phase 1 (логування): мапінг dominant_loop на ту ж мову, що й DRIVE_GOALS,
+# щоб порівняти, чи MAL несе нову інформацію чи дублює NT-drives.
+# :default не мапиться — немає переможця, порівняння неінформативне.
+const _MAL_DRIVE_MAP = Dict(
+    :social        => "cohesion",
+    :curiosity     => "arousal",
+    :identity      => "tension",
+    :goal_conflict => "tension",
+    :chronic_cost  => "tension",
+    :latent        => "tension",
 )
 
 # Carryover: decay 0.85/тік, leak від нового score переможця не додається —
@@ -2459,7 +2499,7 @@ function compute_arbitration(a)::ArbitrationResult
 
     _update_carryover!(carryover, weighted_scores, winner)
 
-    ArbitrationResult(dominant, regime, winner_score, runner_up, runner_up_score, det)
+    ArbitrationResult(dominant, regime, winner_score, runner_up, runner_up_score, det, weighted_scores)
 end
 
 
