@@ -1075,6 +1075,36 @@ function experience!(
     # evaluate_agency! оцінює попередній intent: чи actual vad відповідає predicted?
     # Має бути ДО register_intent! — спочатку оцінюємо що було, потім реєструємо нове
     _agency_eval = evaluate_agency!(a.agency, vad, a.flash_count)
+
+    # MAL Фаза 2: drive influence на фінальний intent.
+    # Перший update_intent! (вище) — чиста NT-динаміка, не чіпаємо.
+    # Тут: MAL може зміщувати або замінювати dom_drive.
+    # :default → без змін
+    # :soft    → +MAL_SOFT_BIAS на MAL-drive в all_drives (може не змінити результат — це теж інфо)
+    # :hard    → MAL-drive замінює dom_drive повністю
+    _mal_drive = get(_MAL_DRIVE_MAP, _arb.dominant_loop, nothing)
+    _drives_for_intent = copy(drives)
+    _dom_drive_before = dom_drive
+    _mal_bias_applied = ""
+    if _arb.regime != :default && !isnothing(_mal_drive) && _mal_drive != dom_drive
+        if _arb.regime == :soft
+            _drives_for_intent[_mal_drive] = get(_drives_for_intent, _mal_drive, 0.0) + MAL_SOFT_BIAS
+            _winner_after = argmax(_drives_for_intent)
+            _mal_bias_applied = "soft_bias"
+            @info "[MAL_OVERRIDE] soft bias: NT=$(isnothing(dom_drive) ? "none" : dom_drive) " *
+                  "MAL=$(_mal_drive) +$(MAL_SOFT_BIAS) | " *
+                  "winner_before=$(isnothing(_dom_drive_before) ? "none" : _dom_drive_before) " *
+                  "winner_after=$(_winner_after)"
+        elseif _arb.regime == :hard
+            _mal_bias_applied = "hard_override"
+            @info "[MAL_OVERRIDE] hard override: NT=$(isnothing(dom_drive) ? "none" : dom_drive) " *
+                  "→ MAL=$(_mal_drive) | " *
+                  "winner_before=$(isnothing(_dom_drive_before) ? "none" : _dom_drive_before) " *
+                  "winner_after=$(_mal_drive)"
+            dom_drive = _mal_drive
+        end
+    end
+
     # Оновлюємо intent з актуальним ownership — без повторного decay
     intent = update_intent!(
         a.intent_engine,
@@ -1084,7 +1114,7 @@ function experience!(
         a.values,
         Float64(a.agency.causal_ownership);
         skip_decay = true,
-        all_drives = drives,
+        all_drives = _drives_for_intent,
     )
     # Resistance override: якщо центральне переконання під тиском — intent змінюється
     if !isnothing(belief_conflict) && belief_conflict.signal_strength > 0.5
@@ -1838,6 +1868,14 @@ function build_identity_block(a::Anima, mem_db = nothing)::String
         try
             other_block = other_model_to_block(mem_db)
             isempty(other_block) || push!(lines, other_block)
+        catch
+            ;
+        end
+
+        # Theory of Mind: активні гіпотези про іншого — що очікую зараз
+        try
+            hyp_block = active_hypotheses_to_block(mem_db)
+            isempty(hyp_block) || push!(lines, hyp_block)
         catch
             ;
         end
