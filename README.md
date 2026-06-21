@@ -747,7 +747,7 @@ Conceptual and technical writing about the ideas behind Anima, ordered by reach:
 - [Why LLMs Will Never Become AGI — Teaching AI to Reflect Using Friston, Jung and Julia](https://dev.to/stell2026/why-llms-will-never-become-agi-teaching-ai-to-reflect-using-friston-jung-and-julia-5afp) — dev.to
 - [I Spent a Year Teaching an AI to Feel the Passage of Time](https://substack.com/home/post/p-198261656) — Substack
 - [Discussion: Cognitive Architectures and Active Inference](https://dou.ua/forums/topic/59409/) — DOU
-- [Discussion: Why a Prompt Can’t Give an AI Agent Initiative)(https://dou.ua/forums/topic/60256/) — DOU
+- [Discussion: Why a Prompt Can’t Give an AI Agent Initiative](https://dou.ua/forums/topic/60256/) — DOU
 - [Anima Community](https://anima-ai.discourse.group/) — Discourse
 
 ---
