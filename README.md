@@ -112,7 +112,7 @@ Recent updates, in brief:
 - under hostile/negative input the system degrades gracefully: `contact_need` drops, `goal_conflict` and `latent` rise, endorsed transitions to `automatic`, but curiosity closure pauses rather than breaks
 
 ---
-![ANIMA GUI](docs/anima-gui.png)
+![ANIMA GUI](anima-gui.png)
 ---
 
 ## Requirements
