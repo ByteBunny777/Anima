@@ -470,7 +470,7 @@ The system can speak first for several independent reasons. `:contact` is intent
 
 - **Julia 1.9+**
 - Julia packages: `HTTP`, `JSON3`, `SQLite`, `Tables`
-- API key from one of the supported providers
+- API key from [openrouter.ai](https://openrouter.ai) (free tier available)
 
 ---
 
@@ -512,15 +512,40 @@ julia --project=. -e 'import Pkg; Pkg.instantiate()'
 
 ## Running
 
-### Option A — Terminal REPL ⭐ (recommended)
+### Option A — GUI (recommended) ⭐
+
+Copy the start script for your OS from the `start/` folder into the project root (`Anima/Anima/`), then run it:
+
+| OS | Script | How to run |
+|---|---|---|
+| macOS | `start_mac.command` | already in root — double-click or `./start_mac.command` |
+| Linux | `start/start_lin.sh` | copy to root, then `./start_lin.sh` |
+| Windows | `start/start_win.bat` | copy to root, then double-click |
+
+The script starts Julia, waits for the HTTP server to come up on port 8088, and opens `http://127.0.0.1:8088` in your browser automatically.
+
+**First run — enter your tokens in the GUI:**
+
+Open the Settings panel (⚙️ icon) and fill in your OpenRouter API key and model names. Settings are saved to `data/gui_settings.json` and take effect immediately — no restart needed.
+
+Alternatively, create a `.env` file in the project root before launching:
+
+```
+OPENROUTER_API_KEY=your_key_here
+ANIMA_LLM_MODEL=anthropic/claude-haiku-4.5
+ANIMA_INPUT_LLM_MODEL=openai/gpt-oss-120b:free
+ANIMA_STATE_DIR=data
+```
+
+### Option B — Terminal REPL only
 
 ```bash
 julia --project=. run_anima.jl
 ```
 
-`run_anima.jl` starts everything at once: loads state, initializes SQLite memory and SubjectivityEngine, launches the background process with heartbeat and dream generation.
+`run_anima.jl` starts everything at once: loads state, initializes SQLite memory and SubjectivityEngine, launches the background process with heartbeat and dream generation, and also starts the GUI server — both interfaces are available simultaneously.
 
-### Option B — Telegram Bot (optional, for persistent use)
+### Option C — Telegram Bot (optional, for persistent use)
 
 Run Anima as a Telegram bot — it polls for messages, responds through the full experience pipeline, and can speak first when internal pressure builds up.
 
@@ -559,29 +584,15 @@ julia --project=. run_anima_telegram.jl
 
 ### LLM configuration
 
-Use `.env` for Telegram and environment variables for the REPL. Do not commit real API keys.
-```julia
-include("anima_memory_db.jl")
-include("anima_narrative.jl")
-include("anima_interface.jl")
-include("anima_subjectivity.jl")
-include("anima_dream.jl")
-include("anima_background.jl")
+All LLM parameters can be set in `.env` or via the GUI settings panel. Environment variables take precedence on startup; GUI settings override them at runtime without restart.
 
-anima = Anima()
-mem   = MemoryDB()
-subj  = SubjectivityEngine(mem)
-
-repl_with_background!(anima;
-    mem             = mem,
-    subj            = subj,
-    use_llm         = true,
-    llm_url         = "https://openrouter.ai/api/v1/chat/completions",
-    llm_model       = get(ENV, "ANIMA_LLM_MODEL", "anthropic/claude-haiku-4.5"),
-    llm_key         = get(ENV, "OPENROUTER_API_KEY", ""),
-    use_input_llm   = true,
-    input_llm_model = get(ENV, "ANIMA_INPUT_LLM_MODEL", get(ENV, "ANIMA_LLM_MODEL", "anthropic/claude-haiku-4.5")),
-    input_llm_key   = get(ENV, "OPENROUTER_API_KEY_INPUT", get(ENV, "OPENROUTER_API_KEY", "")))
+```
+OPENROUTER_API_KEY=your_key
+OPENROUTER_API_KEY_INPUT=your_second_key   # optional: separate key for input LLM
+ANIMA_LLM_MODEL=anthropic/claude-haiku-4.5
+ANIMA_INPUT_LLM_MODEL=openai/gpt-oss-120b:free
+ANIMA_LLM_URL=https://openrouter.ai/api/v1/chat/completions
+ANIMA_STATE_DIR=data
 ```
 
 OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others through a single API key. There is a free tier: [openrouter.ai](https://openrouter.ai).
@@ -602,35 +613,6 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 | `mistralai/mistral-large` | Reliable, stable tone across long sessions |
 
 > Models under 70B tend to flatten the state — responses become generic rather than being shaped by internal dynamics.
-
----
-
-## REPL commands
-
-| Command | Action |
-|---|---|
-| *(any text)* | Process as input, generate state + optional LLM response |
-| `:bg` | Background process status: uptime, heartbeat ticks, BPM, HRV, coherence |
-| `:bgstop` | Stop background process |
-| `:bgstart` | Restart background process |
-| `:memory` | SQLite memory state: episodic count, semantic, stress, anxiety, latent pressure |
-| `:subj` | Subjectivity state: emerged beliefs, stances, current lens, surprise |
-| `:state` | Neurochemical state, somatic markers, HR/HRV, coherence |
-| `:vfe` | VFE, accuracy, complexity, homeostatic drive |
-| `:blanket` | Markov blanket: sensory, internal, integrity |
-| `:hb` | Heartbeat details: HR, HRV, autonomic tone |
-| `:gravity` | Narrative gravity: total field, valence, dominant event |
-| `:anchor` | Existential continuity and groundedness |
-| `:solom` | Solomonoff model: current contextual pattern, complexity |
-| `:self` | Belief graph: all beliefs with confidence, centrality, rigidity |
-| `:crisis` | Crisis monitor: mode, coherence, steps in current mode |
-| `:curiosity` | Active curiosity objects: label, intensity, valence, activation count, refinement history |
-| `:dreams` | Recent dreams: narrative, source, φ, nt_delta |
-| `:history` | Last 10 dialog turns |
-| `:clearhist` | Clear dialog history |
-| `:audit` | SubjectivityAudit summary: avg score and per-question rates over last 20 flashes |
-| `:save` | Force save state to disk |
-| `:quit` | Save and exit |
 
 ---
 
@@ -688,8 +670,12 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 ├── anima_background.jl     # Background process: heartbeat, drift, memory metabolism, initiative
 ├── anima_dream.jl          # Dream generation — processing unresolved experience during sleep
 ├── anima_telegram.jl       # Telegram bridge — bot loop replacing the terminal REPL
-├── run_anima.jl            # Single launch point (terminal REPL)
-├── run_anima_telegram.jl   # Single launch point (Telegram bot)
+│
+├── anima_console.html      # Web GUI — live monitoring dashboard
+├── anima_gui_bridge.jl     # Structured JSON state-mirroring for the GUI
+├── anima_gui_server.jl     # HTTP server: serves GUI, exposes /api/state, /api/chat, /api/send, /api/cmd
+├── anima_gui_settings.jl   # GUI settings persistence (language, models, tokens)
+│
 ├── llm/
 │   ├── system_prompt.txt
 │   ├── state_template.txt
@@ -697,14 +683,17 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 │   └── initiative_system.txt
 ├── memory/
 │   └── anima.db              # SQLite memory database (created automatically)
-├── anima_core.json           # (created automatically)
-├── anima_psyche.json         # (updated in background every minute)
-├── anima_self.json           # (created automatically)
-├── anima_latent.json         # (updated in background)
-├── anima_narrative.json      # (updated on significant changes, min. 50 flashes)
-├── anima_session_intent.json # (temporary carry-over state, deleted after application)
-├── anima_dialog.json         # (created automatically)
-├── anima_dream.json          # (created on first dream)
+│
+├── anima_core.json
+├── anima_psyche.json
+├── anima_self.json
+├── anima_latent.json
+├── anima_narrative.json
+├── anima_dialog.json
+├── anima_dream.json
+├── gui_state.json
+├── gui_chat.jsonl
+├── gui_events.jsonl
 │
 ├── Dockerfile                # Docker image: Julia 1.10 + all dependencies
 ├── docker-compose.yml        # One-command deploy with .env support
@@ -712,7 +701,7 @@ OpenRouter provides access to GPT, Gemini, Claude, Llama, DeepSeek and others th
 └── .dockerignore
 ```
 
-`run_anima.jl` / `run_anima_telegram.jl` include all files in the correct order automatically.
+`run_anima.jl` includes all files in the correct order automatically.
 
 ---
 ### An early pre-Julia Python prototype of Anima is preserved in `docs/archive/` for historical and architectural reference.
