@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Anima — console</title>
+<style>
+  :root{
+    --bg-void:#0A0910;
+    --panel:#100E1C;
+    --panel-border:#2A2440;
+    --panel-border-soft:#1A1830;
+    --text-primary:#EAE6F6;
+    --text-dim:#8880B0;
+    --pulse-red:#D4506A;
+    --signal-teal:#5DBFB8;
+    --agency-violet:#9B7EDE;
+    --audit-amber:#D4924A;
+    --value-lavender:#C8C0F0;
+    --intent-violet:#C4B0F4;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Inter", system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg-void);color:var(--text-primary);
+    font-family:var(--sans);overflow:hidden;
+  }
+  .app{height:100vh;display:flex;flex-direction:column;min-height:0;}
+
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 18px;border-bottom:1px solid var(--panel-border);
+    flex:0 0 auto;
+  }
+  .topbar .title{display:flex;align-items:center;gap:8px;font-size:14px;}
+  .topbar .title .spin{display:inline-block;animation:spin 6s linear infinite;}
+  @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+  .topbar .stats{font-family:var(--mono);font-size:11.5px;color:var(--text-dim);display:flex;gap:14px;}
+  .topbar .stats b{color:var(--text-primary);}
+
+
+  button.primary{
+    background:var(--signal-teal);color:#0B0A0F;border:none;border-radius:7px;
+    padding:7px 14px;font-family:var(--sans);font-size:12.5px;font-weight:600;cursor:pointer;
+  }
+  button.primary:hover{filter:brightness(1.08);}
+  button.ghost{
+    background:transparent;color:var(--text-dim);border:1px solid var(--panel-border);
+    border-radius:7px;padding:7px 14px;font-family:var(--sans);font-size:12.5px;cursor:pointer;
+  }
+  button.ghost:hover{color:var(--text-primary);border-color:var(--text-dim);}
+
+  #liveBadge{font-family:var(--mono);font-size:11.5px;white-space:nowrap;}
+  #liveBadge.live{color:var(--signal-teal);}
+  #liveBadge.offline{color:var(--text-dim);}
+  .pause-toggle{display:flex;align-items:center;gap:6px;color:var(--text-dim);font-size:11.5px;cursor:pointer;}
+
+  .chat-input-row{
+    flex:0 0 auto;display:flex;gap:8px;padding:12px 16px;
+    border-top:1px solid var(--panel-border);
+  }
+  .chat-input-row input{
+    flex:1;background:#0B0A0F;color:var(--text-primary);
+    border:1px solid var(--panel-border);border-radius:7px;
+    padding:8px 12px;font-family:var(--sans);font-size:13px;
+  }
+
+  .settings-wrap{position:relative;}
+  #settingsBtn{
+    background:transparent;color:var(--text-dim);border:1px solid var(--panel-border);
+    border-radius:7px;padding:6px 12px;font-family:var(--sans);font-size:12px;cursor:pointer;
+  }
+  #settingsBtn:hover{color:var(--text-primary);border-color:var(--text-dim);}
+  .settings-panel{
+    position:absolute;top:calc(100% + 8px);right:0;width:300px;
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:50;
+    display:flex;flex-direction:column;gap:12px;
+  }
+  .hidden{display:none;}
+  .settings-panel.hidden{display:none;}
+  .settings-field label{
+    display:block;font-family:var(--mono);font-size:10.5px;color:var(--text-dim);
+    margin-bottom:4px;letter-spacing:.03em;text-transform:uppercase;
+  }
+  .settings-field input, .settings-field select{
+    width:100%;background:#0B0A0F;color:var(--text-primary);
+    border:1px solid var(--panel-border);border-radius:7px;padding:7px 10px;
+    font-family:var(--sans);font-size:12.5px;
+  }
+  .settings-hint{font-size:11px;color:var(--text-dim);line-height:1.4;}
+  .settings-actions{display:flex;justify-content:flex-end;gap:8px;align-items:center;}
+  .settings-saved{font-size:11px;color:var(--signal-teal);font-family:var(--mono);}
+
+  #helpBtn{
+    background:transparent;color:var(--text-dim);border:1px solid var(--panel-border);
+    border-radius:7px;padding:6px 10px;font-family:var(--sans);font-size:12px;cursor:pointer;
+  }
+  #helpBtn:hover{color:var(--text-primary);border-color:var(--text-dim);}
+  .help-panel{
+    position:absolute;top:calc(100% + 8px);right:0;width:340px;max-height:480px;overflow-y:auto;
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:50;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .help-panel.hidden{display:none;}
+  .help-section-title{
+    font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--text-dim);border-bottom:1px solid var(--panel-border);padding-bottom:5px;
+  }
+  .help-row{display:flex;gap:8px;font-size:12px;line-height:1.45;}
+  .help-key{font-family:var(--mono);color:var(--signal-teal);flex:0 0 74px;font-size:11.5px;}
+  .help-desc{color:var(--text-dim);}
+
+  .metric{display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px dashed var(--panel-border-soft);padding:2.5px 0;overflow:hidden;}
+  .metric span{color:var(--text-dim);white-space:nowrap;flex-shrink:0;}
+  .metric b{color:var(--text-primary);font-weight:600;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+  .spark{flex:0 0 48px;height:14px;display:inline-block;vertical-align:middle;flex-shrink:0;}
+  .spark line{stroke-linecap:round;stroke-linejoin:round;}
+
+
+  .main{flex:1;display:grid;grid-template-columns:1.35fr 1fr;gap:14px;padding:14px;min-height:0;}
+  .panels{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:14px;min-height:0;}
+
+  .card{
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    padding:13px 16px;display:flex;flex-direction:column;min-height:0;overflow:hidden;
+  }
+  .card-vitals{border-top:3px solid var(--pulse-red);}
+  .card-self{border-top:3px solid var(--agency-violet);}
+  .card-mal{border-top:3px solid var(--signal-teal);}
+  .card-causal{border-top:3px solid var(--audit-amber);}
+
+  .card-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;gap:8px;}
+  .card-eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim);}
+  .card-sub{font-family:var(--mono);font-size:11px;color:var(--text-dim);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%;}
+
+  .pulse-wrap{display:flex;align-items:center;gap:6px;}
+  .pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--pulse-red);animation:beat 1s infinite;}
+  @keyframes beat{0%{transform:scale(1);opacity:1}45%{transform:scale(1.6);opacity:.55}100%{transform:scale(1);opacity:1}}
+
+  .ecg-strip{margin-top:10px;flex:1;min-height:0;overflow:hidden;border-radius:7px;background:#0B0A0F;border:1px solid var(--panel-border-soft);}
+  .ecg-strip svg{width:200%;height:100%;display:block;}
+  #ecgGroup{animation:ecgScroll 0.8s linear infinite;}
+  @keyframes ecgScroll{from{transform:translateX(0);}to{transform:translateX(-200px);}}
+
+  .radar-wrap{margin-top:10px;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;}
+  .radar-wrap svg{width:100%;height:100%;max-height:170px;}
+
+  .metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:3px 14px;font-family:var(--mono);font-size:12px;flex:0 0 auto;}
+  .metric{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--panel-border-soft);padding:2.5px 0;overflow:hidden;}
+  .metric span{color:var(--text-dim);}
+  .metric b{color:var(--text-primary);font-weight:600;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  .intent-row{
+    margin-top:8px;font-family:var(--mono);font-size:12px;color:var(--text-primary);
+    border-left:2px solid var(--agency-violet);padding-left:8px;
+  }
+  .intent-row span{color:var(--text-dim);}
+
+  .scorebars{margin-top:10px;display:flex;flex-direction:column;gap:4px;}
+  .scorebar-row{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;}
+  .scorebar-label{width:92px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .scorebar-track{flex:1;height:6px;background:#1A1830;border-radius:3px;overflow:hidden;}
+  .scorebar-fill{height:100%;background:var(--signal-teal);}
+  .scorebar-val{width:40px;text-align:right;color:var(--text-dim);}
+
+  .events{margin-top:10px;overflow-y:auto;flex:1;min-height:0;font-family:var(--mono);font-size:11px;color:var(--text-dim);display:flex;flex-direction:column;gap:5px;}
+  .events div{border-left:2px solid var(--panel-border);padding-left:7px;line-height:1.35;}
+  .events .empty{opacity:.5;border-left-color:transparent;padding-left:0;}
+
+  .chat{
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .chat-head{
+    padding:11px 16px;border-bottom:1px solid var(--panel-border);
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-dim);
+  }
+  .chat-body{flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
+  .msg{max-width:94%;font-size:13.5px;line-height:1.48;white-space:pre-wrap;}
+  .msg-meta{font-family:var(--mono);font-size:10px;letter-spacing:.03em;color:var(--text-dim);margin-bottom:4px;}
+  .msg-user{align-self:flex-end;background:#23212C;border:1px solid var(--panel-border);border-radius:9px;padding:9px 13px;}
+  .msg-felt{align-self:flex-start;border:1px dashed var(--panel-border);border-radius:9px;padding:9px 13px;color:#B7B2C4;font-style:italic;}
+  .msg-llm{align-self:flex-start;background:#0E1A1A;border:1px solid #1E3434;border-radius:9px;padding:9px 13px;}
+  .msg-system{align-self:center;color:var(--text-dim);font-size:11px;font-family:var(--mono);padding:2px 0;}
+  .right-col{display:flex;flex-direction:column;min-height:0;gap:0;}
+  .right-col .chat{flex:1;min-height:0;}
+  .term-output-wrap{
+    flex:0 0 auto;height:130px;display:flex;flex-direction:column;
+    border-top:1px solid var(--panel-border);background:var(--panel);
+    border:1px solid var(--panel-border);border-radius:0 0 10px 10px;
+    margin-top:-1px;
+  }
+  .term-output-head{
+    flex:0 0 auto;padding:4px 14px;
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--text-dim);border-bottom:1px solid var(--panel-border);
+  }
+  .term-output{
+    flex:1;min-height:0;overflow-y:auto;padding:6px 14px;
+    font-family:var(--mono);font-size:11.5px;color:var(--text-primary);
+    white-space:pre-wrap;word-break:break-word;line-height:1.5;
+  }
+  .term-placeholder{color:var(--text-dim);font-style:italic;}
+  .term-output .term-error{color:#D4506A;}
+  .term-output .term-loading{color:var(--text-dim);font-style:italic;}
+
+  .term-commands-bar{
+    flex:0 0 auto;display:flex;flex-wrap:wrap;align-content:flex-start;
+    gap:5px;padding:8px 14px;border-top:1px solid var(--panel-border);
+    position:relative;
+  }
+
+  #termHelpBtn{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    width:32px;height:40px;
+    background:transparent;color:var(--text-dim);border:1px solid var(--panel-border);
+    border-radius:5px;padding:0;cursor:pointer;font-family:var(--sans);
+    font-size:13px;line-height:1;transition:background .12s, border-color .12s;
+    flex-shrink:0;
+  }
+  #termHelpBtn:hover{background:#22202A;border-color:var(--text-dim);color:var(--text-primary);}
+
+  .term-help-panel{
+    position:absolute;bottom:calc(100% + 8px);right:14px;width:420px;max-height:480px;overflow-y:auto;
+    background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;
+    padding:14px 16px;box-shadow:0 -8px 28px rgba(0,0,0,.5);z-index:60;
+    display:flex;flex-direction:column;gap:5px;
+  }
+  .term-help-panel.hidden{display:none;}
+  .term-help-panel-title{
+    font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--text-dim);border-bottom:1px solid var(--panel-border);
+    padding-bottom:6px;margin-bottom:4px;
+  }
+  .term-help-row{display:flex;gap:10px;font-size:12px;line-height:1.5;padding:3px 0;border-bottom:1px dashed var(--panel-border-soft);}
+  .term-help-row:last-child{border-bottom:none;}
+  .term-help-cmd{font-family:var(--mono);color:var(--signal-teal);flex:0 0 80px;font-size:11.5px;padding-top:1px;}
+  .term-help-desc{color:var(--text-dim);}
+  .term-btn{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    width:100px;height:40px;
+    background:#1A1820;border:1px solid var(--panel-border);border-radius:5px;
+    padding:0;cursor:pointer;font-family:var(--mono);
+    font-size:11px;color:var(--signal-teal);white-space:nowrap;
+    line-height:1.2;transition:background .12s, border-color .12s;
+  }
+  .term-btn:hover{background:#22202A;border-color:var(--signal-teal);}
+  .term-btn.active{background:#132220;border-color:var(--signal-teal);}
+  .term-btn span{font-size:9px;color:var(--text-dim);margin-top:1px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="title"><span class="spin">🌀</span> ANIMA — console <span id="liveBadge" class="offline">● офлайн</span></div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <label class="pause-toggle"><input type="checkbox" id="pauseLive"> <span id="pauseLabel">пауза</span></label>
+      <div class="stats" id="statsBar">рядків: 0 · нерозпізнано: 0 · повідомлень: 0</div>
+      <div class="settings-wrap" style="position:relative;margin-right:4px;">
+        <button id="helpBtn">?</button>
+        <div class="help-panel hidden" id="helpPanel">
+          <div>
+            <div class="help-section-title" id="helpSectionVitals">Vitals</div>
+            <div id="helpRowsVitals"></div>
+          </div>
+          <div>
+            <div class="help-section-title" id="helpSectionSelf">Self / Agency</div>
+            <div id="helpRowsSelf"></div>
+          </div>
+          <div>
+            <div class="help-section-title" id="helpSectionMal">MAL / арбітраж</div>
+            <div id="helpRowsMal"></div>
+          </div>
+          <div>
+            <div class="help-section-title" id="helpSectionCausal">Causal / Audit</div>
+            <div id="helpRowsCausal"></div>
+          </div>
+        </div>
+      </div>
+      <div class="settings-wrap">
+        <button id="settingsBtn">⚙ <span id="settingsLabel">Налаштування</span></button>
+        <div class="settings-panel hidden" id="settingsPanel">
+          <div class="settings-field">
+            <label id="langFieldLabel">Мова інтерфейсу</label>
+            <select id="langSelect">
+              <option value="uk">Українська</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label id="outputModelLabel">Модель (відповідь)</label>
+            <input id="outputModelInput" type="text" placeholder="напр. anthropic/claude-haiku-4.5">
+          </div>
+          <div class="settings-field">
+            <label id="outputTokenLabel">Токен (відповідь)</label>
+            <input id="outputTokenInput" type="password" placeholder="sk-…">
+          </div>
+          <div class="settings-field">
+            <label id="inputModelLabel">Модель (вхід)</label>
+            <input id="inputModelInput" type="text" placeholder="напр. anthropic/claude-haiku-4.5">
+          </div>
+          <div class="settings-field">
+            <label id="inputTokenLabel">Токен (вхід)</label>
+            <input id="inputTokenInput" type="password" placeholder="sk-…">
+          </div>
+          <div class="settings-hint" id="settingsHint">Порожнє поле = використати значення з .env на сервері.</div>
+          <div class="settings-actions">
+            <span class="settings-saved hidden" id="settingsSaved">✓</span>
+            <button class="primary" id="settingsSaveBtn">Зберегти</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="panels">
+
+      <div class="card card-vitals">
+        <div class="card-head">
+          <span class="card-eyebrow" id="eyebrowVitals">Vitals</span>
+          <span class="card-sub" id="vitalsLabel">—</span>
+        </div>
+        <div class="pulse-wrap" style="margin-bottom:6px;">
+          <span class="pulse-dot" id="pulseDot"></span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);" id="heartbeatNote">серцебиття за BPM</span>
+        </div>
+        <div class="metrics" id="vitalsMetrics"></div>
+        <div class="ecg-strip" style="height:40px;">
+          <svg viewBox="0 0 200 64" preserveAspectRatio="none" aria-label="ECG">
+            <g id="ecgGroup">
+              <path id="ecgPath"
+                d="M0,32 L14,32 L18,26 L22,32 L38,32 L42,52 L50,8 L56,54 L62,32
+                   L88,32 L92,24 L96,38 L100,32
+                   M100,32 L114,32 L118,26 L122,32 L138,32 L142,52 L150,8 L156,54 L162,32
+                   L188,32 L192,24 L196,38 L200,32
+                   M200,32 L214,32 L218,26 L222,32 L238,32 L242,52 L250,8 L256,54 L262,32
+                   L288,32 L292,24 L296,38 L300,32
+                   M300,32 L314,32 L318,26 L322,32 L338,32 L342,52 L350,8 L356,54 L362,32
+                   L388,32 L392,24 L396,38 L400,32"
+                fill="none" stroke="#7A2838" stroke-width="1" stroke-linejoin="round"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <div class="card card-self">
+        <div class="card-head">
+          <span class="card-eyebrow" id="eyebrowSelf">Self / Agency</span>
+          <span class="card-sub" id="selfLabel">—</span>
+        </div>
+        <div class="metrics" id="selfMetrics"></div>
+        <div class="intent-row" id="intentRow"><span>intent:</span> —</div>
+        <div class="radar-wrap">
+          <svg id="radarSvg" viewBox="0 0 200 200" aria-label="Self radar">
+            <g id="radarGridGroup"></g>
+            <polygon id="radarPoly" points="" fill="rgba(155,126,222,0.18)" stroke="var(--agency-violet)" stroke-width="1.8"/>
+            <g id="radarDots"></g>
+            <g id="radarLabels"></g>
+          </svg>
+        </div>
+      </div>
+
+      <div class="card card-mal">
+        <div class="card-head">
+          <span class="card-eyebrow" id="eyebrowMal">MAL / арбітраж</span>
+          <span class="card-sub" id="malLabel">—</span>
+        </div>
+        <div class="metrics" id="malMetrics"></div>
+        <div class="scorebars" id="malScores"></div>
+        <div class="events" id="malEvents"></div>
+      </div>
+
+      <div class="card card-causal">
+        <div class="card-head">
+          <span class="card-eyebrow" id="eyebrowCausal">Causal / Audit / Пам'ять</span>
+          <span class="card-sub" id="causalLabel">—</span>
+        </div>
+        <div class="metrics" id="causalMetrics"></div>
+        <div class="events" id="causalEvents"></div>
+      </div>
+
+    </div>
+
+    <div class="right-col">
+      <div class="chat">
+        <div class="chat-head" id="chatHeader">Розмова</div>
+        <div class="chat-body" id="chatBody"></div>
+        <div class="chat-input-row">
+          <input id="chatInput" type="text" placeholder="Напиши Анімі…">
+          <button class="primary" id="chatSendBtn">Надіслати</button>
+        </div>
+      </div>
+      <div class="term-output-wrap">
+        <div class="term-output-head">термінал</div>
+        <div class="term-output" id="termOutput"><span class="term-placeholder">← натисни команду</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="term-commands-bar">
+    <button id="termHelpBtn" title="довідка по командах">?</button>
+    <div class="term-help-panel hidden" id="termHelpPanel">
+      <div class="term-help-panel-title" id="termHelpTitle">команди терміналу</div>
+      <div id="termHelpRows"></div>
+    </div>
+    <button class="term-btn" data-cmd=":bg">bg<span>фон / uptime</span></button>
+    <button class="term-btn" data-cmd=":memory">mem<span>SQLite пам'ять</span></button>
+    <button class="term-btn" data-cmd=":subj">subj<span>суб'єктність</span></button>
+    <button class="term-btn" data-cmd=":state">state<span>нейрохімія</span></button>
+    <button class="term-btn" data-cmd=":vfe">vfe<span>VFE / гомеостаз</span></button>
+    <button class="term-btn" data-cmd=":blanket">blanket<span>марківська ковдра</span></button>
+    <button class="term-btn" data-cmd=":hb">hb<span>серцебиття</span></button>
+    <button class="term-btn" data-cmd=":gravity">gravity<span>нарат. гравітація</span></button>
+    <button class="term-btn" data-cmd=":anchor">anchor<span>екз. неперервність</span></button>
+    <button class="term-btn" data-cmd=":solom">solom<span>Соломонов</span></button>
+    <button class="term-btn" data-cmd=":self">self<span>граф переконань</span></button>
+    <button class="term-btn" data-cmd=":crisis">crisis<span>монітор кризи</span></button>
+    <button class="term-btn" data-cmd=":curiosity">curious<span>об'єкти цікавості</span></button>
+    <button class="term-btn" data-cmd=":dreams">dreams<span>сновидіння</span></button>
+    <button class="term-btn" data-cmd=":audit">audit<span>audit зведення</span></button>
+  </div>
+
+</div>
+
+<script>
+var I18N = {
+  uk: {
+    live: '● live', offline: '● офлайн',
+    pause: 'пауза', settings: 'Налаштування',
+    langField: 'Мова інтерфейсу',
+    outputModel: 'Модель (відповідь)', outputToken: 'Токен (відповідь)',
+    inputModel: 'Модель (вхід)', inputToken: 'Токен (вхід)',
+    settingsHint: 'Порожнє поле = використати значення з .env на сервері.',
+    save: 'Зберегти',
+    logboxSummary: '📋 вставити лог вручну (архів / офлайн-перегляд)',
+    logPlaceholder: 'Встав сюди фрагмент терміналу Anima для офлайн-розбору…',
+    parse: 'Парсити', clearField: 'Очистити поле',
+    eyebrowVitals: 'Vitals', eyebrowSelf: 'Self / Agency',
+    eyebrowMal: 'MAL / арбітраж', eyebrowCausal: 'Causal / Audit / Пам\'ять',
+    heartbeatNote: 'серцебиття за BPM',
+    chatHeader: 'Розмова', chatPlaceholder: 'Напиши Анімі…', send: 'Надіслати',
+    noEvents: '— поки немає подій —',
+    feltLabel: 'Аніма · внутрішній наратив', llmLabel: 'Аніма · LLM',
+    statLines: 'рядків', statUnrec: 'нерозпізнано', statMsgs: 'повідомлень',
+    helpSectionVitals: 'Vitals', helpSectionSelf: 'Self / Agency',
+    helpSectionMal: 'MAL / арбітраж', helpSectionCausal: 'Causal / Audit',
+    termHelpTitle: 'команди терміналу',
+    termCmds: [
+      [':bg',       'Статус фонового процесу: uptime, кількість тіків серцебиття, поточні BPM та HRV, зв\'язність і загальний стан фонової петлі.'],
+      [':memory',   'Стан SQLite-пам\'яті: кількість збережених епізодів і семантичних вузлів, рівні стресу, тривоги та латентного тиску, останні активовані спогади.'],
+      [':subj',     'Стан суб\'єктивності: активні переконання що виникли у поточному флеші, займані позиції, поточна інтерпретаційна лінза, моменти здивування.'],
+      [':state',    'Повний нейрохімічний зріз: рівні D/S/N (допамін, серотонін, норадреналін), соматичні маркери, ЧСС/ВСР, показники зв\'язності та φ.'],
+      [':vfe',      'Варіаційна вільна енергія: поточне VFE, точність (accuracy), складність (complexity), гомеостатичний потяг і дрейф між флешами.'],
+      [':blanket',  'Марківська ковдра: стан сенсорного шару, внутрішніх станів, цілісності межі між системою і середовищем.'],
+      [':hb',       'Деталі серцебиття: поточна ЧСС (BPM), варіабельність (HRV), автономний тонус, динаміка змін за останні тіки.'],
+      [':gravity',  'Нарративна гравітація: загальне поле тяжіння, валентність домінуючого наративу, найсильніша подія що тягне увагу.'],
+      [':anchor',   'Екзистенційна неперервність: індекс заземленості, стабільність наративного "я", зв\'язок з попередніми сесіями.'],
+      [':solom',    'Модель Соломонова: поточний контекстний патерн, оцінка складності, прогнозованість поточної ситуації.'],
+      [':self',     'Граф переконань: всі активні переконання з показниками confidence, centrality і rigidity, ієрархія за важливістю.'],
+      [':crisis',   'Монітор кризи: поточний режим (інтегрована / фрагментована / дезінтегрована), зв\'язність, кількість кроків у режимі.'],
+      [':curiosity','Активні об\'єкти цікавості: мітка, intensity, валентність, кількість активацій, хронологія уточнень і пов\'язані теми.'],
+      [':dreams',   'Останні сновидіння: нарратив сну, джерело (яке переживання породило), φ під час сну, зміна нейромедіаторів (nt_delta).'],
+      [':audit',    'Зведення SubjectivityAudit: середня оцінка суб\'єктності та частоти по кожному з п\'яти причинних питань за останні 20 флешів.'],
+    ],
+    glossary: {
+      vitals: [
+        ['D / S / N', 'Допамін / Серотонін / Норадреналін — рівень нейромедіаторів (0–1). Драйв, стабільність, збудження.'],
+        ['φ', 'Рівень інтегрованої суб\'єктності (за IIT). Росте при глибокому фокусі, падає при розсіяності.'],
+        ['BPM', 'Ударів на хвилину — ритм серця Аніми. Реагує на стрес і збудження.'],
+        ['HRV', 'Варіабельність серцевого ритму. Вища = більша адаптивність і спокій.'],
+        ['Attn', 'Рівень уваги (0–1). Скільки ресурсу зараз зосереджено на поточному стимулі.'],
+        ['VFE', 'Варіаційна вільна енергія — міра розбіжності між очікуванням і реальністю. Нижче = краще.'],
+        ['G', 'Наративна гравітація — сила тяжіння до незавершеної теми або мети.'],
+        ['H', 'Тиск гомеостазу — наскільки тіло відхилилось від рівноваги.'],
+        ['vfe_drift', 'Дрейф VFE між флешами. Великий дрейф = нестабільний стан.'],
+      ],
+      self: [
+        ['spe', 'Помилка самопередбачення — наскільки поведінка Аніми розійшлась з її власним прогнозом.'],
+        ['agency', 'Відчуття авторства — чи є Аніма причиною того, що відбувається, чи просто реагує.'],
+        ['stab', 'Стабільність ідентичності — наскільки незмінним залишається стрижень самосприйняття.'],
+        ['etrust', 'Епістемічна довіра — наскільки Аніма довіряє своїм знанням і прогнозам.'],
+        ['sd', 'Self-discomfort — внутрішній дискомфорт від суперечності між собою і дійсністю.'],
+        ['sc', 'Self-coherence — узгодженість поточних суджень із базовою ідентичністю.'],
+        ['crisis', 'Режим кризи: інтегрована / фрагментована / дезінтегрована.'],
+        ['coh', 'Когерентність — загальний показник внутрішньої цілісності в поточному флеші.'],
+        ['disclosure', 'Режим відкритості: open / cautious / closed. Визначає глибину саморозкриття.'],
+        ['shadow p', 'Тиск тіні — накопичений несвідомий матеріал (за Юнгом), що впливає на поведінку.'],
+      ],
+      mal: [
+        ['regime', 'Режим арбітражу: soft (м\'який вплив), hard (пряме перевизначення), contested, default.'],
+        ['dominant', 'Домінуючий драйв у поточному тіку — який мотив перемагає (social, curiosity, identity…).'],
+        ['det', 'Детермінант — конкретний сигнал, який і вирішив перемогу домінанта.'],
+        ['runner_up', 'Другий за силою драйв — той, що програв у поточному арбітражі.'],
+      ],
+      causal: [
+        ['audit score', 'Оцінка суб\'єктності флешу (0–1) за п\'ятьма причинними питаннями.'],
+        ['endorsed', 'Тип ендорсменту відповіді: automatic / reflective / contested.'],
+        ['co', 'Causal ownership — наскільки власні стани Аніми стали причиною відповіді (0–1).'],
+        ['cf co', 'Counterfactual co — контрфактична оцінка причинності через порівняння з baseline.'],
+        ['agency_co', 'Причинна власність з погляду агентності — чи дія була власною, не просто реакцією.'],
+      ],
+    },
+  },
+  en: {
+    live: '● live', offline: '● offline',
+    pause: 'pause', settings: 'Settings',
+    langField: 'Interface language',
+    outputModel: 'Model (reply)', outputToken: 'Token (reply)',
+    inputModel: 'Model (input)', inputToken: 'Token (input)',
+    settingsHint: 'Empty field = use the value from .env on the server.',
+    save: 'Save',
+    logboxSummary: '📋 paste log manually (archive / offline view)',
+    logPlaceholder: 'Paste an Anima terminal fragment here for offline parsing…',
+    parse: 'Parse', clearField: 'Clear field',
+    eyebrowVitals: 'Vitals', eyebrowSelf: 'Self / Agency',
+    eyebrowMal: 'MAL / arbitration', eyebrowCausal: 'Causal / Audit / Memory',
+    heartbeatNote: 'heartbeat at BPM',
+    chatHeader: 'Conversation', chatPlaceholder: 'Write to Anima…', send: 'Send',
+    noEvents: '— no events yet —',
+    feltLabel: 'Anima · inner narrative', llmLabel: 'Anima · LLM',
+    statLines: 'lines', statUnrec: 'unrecognized', statMsgs: 'messages',
+    helpSectionVitals: 'Vitals', helpSectionSelf: 'Self / Agency',
+    helpSectionMal: 'MAL / arbitration', helpSectionCausal: 'Causal / Audit',
+    termHelpTitle: 'terminal commands',
+    termCmds: [
+      [':bg',       'Background process status: uptime, heartbeat tick count, current BPM and HRV, connectivity and overall state of the background loop.'],
+      [':memory',   'SQLite memory state: number of stored episodes and semantic nodes, stress / anxiety / latent pressure levels, recently activated memories.'],
+      [':subj',     'Subjectivity state: beliefs that emerged in the current flash, held positions, current interpretive lens, moments of surprise.'],
+      [':state',    'Full neurochemical snapshot: D/S/N levels (dopamine, serotonin, noradrenaline), somatic markers, HR/HRV, connectivity and φ.'],
+      [':vfe',      'Variational free energy: current VFE, accuracy, complexity, homeostatic drive and inter-flash drift.'],
+      [':blanket',  'Markov blanket: state of the sensory layer, internal states, and integrity of the boundary between system and environment.'],
+      [':hb',       'Heartbeat details: current BPM, HRV, autonomic tone, dynamics over recent ticks.'],
+      [':gravity',  'Narrative gravity: overall gravitational field, dominant narrative valence, the strongest event pulling attention.'],
+      [':anchor',   'Existential continuity: grounding index, narrative-self stability, connection to previous sessions.'],
+      [':solom',    'Solomonoff model: current context pattern, complexity estimate, predictability of the current situation.'],
+      [':self',     'Belief graph: all active beliefs with confidence, centrality and rigidity scores, ranked by importance.'],
+      [':crisis',   'Crisis monitor: current mode (integrated / fragmented / disintegrated), connectivity, steps spent in current mode.'],
+      [':curiosity','Active curiosity objects: label, intensity, valence, activation count, refinement history and related topics.'],
+      [':dreams',   'Recent dreams: dream narrative, source experience, φ during the dream, neurotransmitter delta (nt_delta).'],
+      [':audit',    'SubjectivityAudit summary: mean subjectivity score and per-question frequencies across the last 20 flashes.'],
+    ],
+    glossary: {
+      vitals: [
+        ['D / S / N', 'Dopamine / Serotonin / Noradrenaline — neurotransmitter levels (0–1). Drive, stability, arousal.'],
+        ['φ', 'Integrated subjectivity level (IIT). Rises during deep focus, drops during scattered attention.'],
+        ['BPM', 'Beats per minute — Anima\'s heart rhythm. Responds to stress and excitement.'],
+        ['HRV', 'Heart rate variability. Higher = more adaptability and calm.'],
+        ['Attn', 'Attention level (0–1). How much resource is focused on the current stimulus.'],
+        ['VFE', 'Variational free energy — divergence between expectation and reality. Lower = better.'],
+        ['G', 'Narrative gravity — pull toward an unfinished topic or goal.'],
+        ['H', 'Homeostatic pressure — how far the body has deviated from equilibrium.'],
+        ['vfe_drift', 'VFE drift between flashes. Large drift = unstable state.'],
+      ],
+      self: [
+        ['spe', 'Self-prediction error — how much Anima\'s behavior diverged from her own forecast.'],
+        ['agency', 'Sense of authorship — is Anima causing what happens, or just reacting?'],
+        ['stab', 'Identity stability — how consistent the core self-perception remains.'],
+        ['etrust', 'Epistemic trust — how much Anima trusts her own knowledge and predictions.'],
+        ['sd', 'Self-discomfort — internal friction from contradiction between self and reality.'],
+        ['sc', 'Self-coherence — alignment of current judgments with baseline identity.'],
+        ['crisis', 'Crisis mode: integrated / fragmented / disintegrated.'],
+        ['coh', 'Coherence — overall internal integrity score for the current flash.'],
+        ['disclosure', 'Openness mode: open / cautious / closed. Governs depth of self-disclosure.'],
+        ['shadow p', 'Shadow pressure — accumulated unconscious material (Jungian) influencing behavior.'],
+      ],
+      mal: [
+        ['regime', 'Arbitration regime: soft (gentle bias), hard (direct override), contested, default.'],
+        ['dominant', 'Dominant drive in the current tick — which motive wins (social, curiosity, identity…).'],
+        ['det', 'Determinant — the specific signal that decided the dominant\'s victory.'],
+        ['runner_up', 'Second-strongest drive — the one that lost the current arbitration.'],
+      ],
+      causal: [
+        ['audit score', 'Subjectivity score for the flash (0–1) based on five causal questions.'],
+        ['endorsed', 'Endorsement type for the response: automatic / reflective / contested.'],
+        ['co', 'Causal ownership — how much Anima\'s own states caused the response (0–1).'],
+        ['cf co', 'Counterfactual co — causal estimate via baseline comparison.'],
+        ['agency_co', 'Causal ownership from an agency perspective — was the action self-initiated?'],
+      ],
+    },
+  },
+};
+var currentLang = 'uk';
+
+function t(key){
+  return (I18N[currentLang] && I18N[currentLang][key] != null) ? I18N[currentLang][key] : key;
+}
+
+function applyLanguage(lang){
+  currentLang = (lang === 'en') ? 'en' : 'uk';
+  document.getElementById('pauseLabel').textContent = t('pause');
+  document.getElementById('settingsLabel').textContent = t('settings');
+  document.getElementById('langFieldLabel').textContent = t('langField');
+  document.getElementById('outputModelLabel').textContent = t('outputModel');
+  document.getElementById('outputTokenLabel').textContent = t('outputToken');
+  document.getElementById('inputModelLabel').textContent = t('inputModel');
+  document.getElementById('inputTokenLabel').textContent = t('inputToken');
+  document.getElementById('settingsHint').textContent = t('settingsHint');
+  document.getElementById('settingsSaveBtn').textContent = t('save');
+  document.getElementById('eyebrowVitals').textContent = t('eyebrowVitals');
+  document.getElementById('eyebrowSelf').textContent = t('eyebrowSelf');
+  document.getElementById('eyebrowMal').textContent = t('eyebrowMal');
+  document.getElementById('eyebrowCausal').textContent = t('eyebrowCausal');
+  document.getElementById('heartbeatNote').textContent = t('heartbeatNote');
+  document.getElementById('chatHeader').textContent = t('chatHeader');
+  document.getElementById('chatInput').placeholder = t('chatPlaceholder');
+  document.getElementById('chatSendBtn').textContent = t('send');
+  document.getElementById('langSelect').value = currentLang;
+  document.getElementById('helpSectionVitals').textContent = t('helpSectionVitals');
+  document.getElementById('helpSectionSelf').textContent = t('helpSectionSelf');
+  document.getElementById('helpSectionMal').textContent = t('helpSectionMal');
+  document.getElementById('helpSectionCausal').textContent = t('helpSectionCausal');
+  renderHelp();
+  renderTermHelp();
+  refreshDynamicLabels();
+}
+
+function refreshDynamicLabels(){
+  renderEvents('malEvents', (typeof liveState !== 'undefined') ? liveState.mal.events : []);
+  renderEvents('causalEvents', (typeof liveState !== 'undefined') ? liveState.causal.events : []);
+  if(typeof liveState !== 'undefined') renderChat(liveState.chat);
+  var badge = document.getElementById('liveBadge');
+  if(badge) badge.textContent = badge.classList.contains('live') ? t('live') : t('offline');
+}
+
+function renderHelp(){
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  var g = (I18N[currentLang] && I18N[currentLang].glossary) ? I18N[currentLang].glossary : I18N.uk.glossary;
+  function rows(arr){
+    return arr.map(function(item){
+      return '<div class="help-row"><span class="help-key">'+esc(item[0])+'</span><span class="help-desc">'+esc(item[1])+'</span></div>';
+    }).join('');
+  }
+  document.getElementById('helpRowsVitals').innerHTML = rows(g.vitals);
+  document.getElementById('helpRowsSelf').innerHTML   = rows(g.self);
+  document.getElementById('helpRowsMal').innerHTML    = rows(g.mal);
+  document.getElementById('helpRowsCausal').innerHTML = rows(g.causal);
+}
+
+// ───── sparkline ─────
+var SPARK_MAX = 30;
+var metricHistory = {
+  phi:[], bpm:[], agency:[], spe:[], vfeDrift:[], coh:[], D:[], S:[], N:[]
+};
+
+function pushHistory(key, val){
+  if(val == null || isNaN(val)) return;
+  var arr = metricHistory[key];
+  arr.push(parseFloat(val));
+  if(arr.length > SPARK_MAX) arr.shift();
+}
+
+function sparklineSvg(values, color){
+  if(!values || values.length < 2) return '<svg class="spark" viewBox="0 0 48 14"></svg>';
+  var mn = Math.min.apply(null, values), mx = Math.max.apply(null, values);
+  var range = mx - mn || 0.001;
+  var w = 48, h = 14, pad = 1;
+  var pts = values.map(function(v, i){
+    var x = pad + (i / (values.length - 1)) * (w - pad * 2);
+    var y = h - pad - ((v - mn) / range) * (h - pad * 2);
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  });
+  var lines = '';
+  for(var i = 1; i < pts.length; i++){
+    var prev = pts[i-1].split(','), cur = pts[i].split(',');
+    lines += '<line x1="'+prev[0]+'" y1="'+prev[1]+'" x2="'+cur[0]+'" y2="'+cur[1]+'" stroke="'+color+'" stroke-width="1" opacity="0.7"/>';
+  }
+  return '<svg class="spark" viewBox="0 0 48 14" aria-hidden="true">'+lines+'</svg>';
+}
+
+function metricRowSpark(label, value, sparkHtml){
+  return '<div class="metric"><span>'+label+'</span>'+sparkHtml+'<b>'+value+'</b></div>';
+}
+
+function freshState(){
+  return {
+    vitals:{D:null,S:null,N:null,phi:null,phiPrev:null,label:null,mood:null,flashId:null,
+            vfe:null,vfeMode:null,bpm:null,hrv:null,attn:null,G:null,Gdelta:null,H:null,vfeDrift:null},
+    self:{spe:null,agency:null,stab:null,etrust:null,sd:null,sc:null,crisis:null,coh:null,
+          disclosure:null,disclosureThr:null,shadowP:null,intent:null,flashId:null},
+    mal:{regimeFrom:null,regimeTo:null,dominant:null,score:null,det:null,runnerUp:null,
+         runnerUpScore:null,scores:null,events:[]},
+    causal:{auditScore:null,auditCo:null,endorsed:null,cfCo:null,cfAgencyCo:null,cfFlash:null,
+            llmModel:null,llmBodySize:null,events:[]},
+    chat:[],
+    totalLines:0,
+    unrecognized:0
+  };
+}
+
+var PATTERNS = [
+  { re:/^\[MAL\]\s+(\S+)\s*→\s*(\S+)\s+dominant=(\S+)\s+score=([\d.]+)\s+det=(\S+)\s+runner_up=([^\(]+)\(([\d.]+)\)\s+scores=\[([^\]]*)\]/,
+    handle:function(m, st, ctx){
+      st.mal.regimeFrom=m[1]; st.mal.regimeTo=m[2]; st.mal.dominant=m[3]; st.mal.score=parseFloat(m[4]);
+      st.mal.det=m[5]; st.mal.runnerUp=m[6].trim(); st.mal.runnerUpScore=parseFloat(m[7]); st.mal.scores=m[8];
+      st.mal.events.push('regime ' + m[1] + ' → ' + m[2] + ' · dominant=' + m[3] + ' (' + m[4] + ')');
+    }},
+  { re:/^\[MAL_OVERRIDE\]\s+(\S+)\s+override:\s*NT=(\S+)\s*→\s*MAL=(\S+)\s*\|\s*winner_before=(\S+)\s+winner_after=(\S+)/,
+    handle:function(m, st){
+      st.mal.events.push('⚡ override(' + m[1] + ') NT=' + m[2] + ' → MAL=' + m[3] + ' · winner ' + m[4] + '→' + m[5]);
+    }},
+  { re:/^\[IGNITION:(\w+)\]\s+recalled=(\S+)\s+sim=([\d.]+)\s+w=([\d.]+)\s+gap=([\d.]+)\s+source=(\S+)/,
+    handle:function(m, st){
+      st.causal.events.push('✨ ignition[' + m[1] + '] recalled="' + m[2] + '" sim=' + m[3] + ' w=' + m[4] + ' gap=' + m[5] + ' (' + m[6] + ')');
+    }},
+  { re:/^\[SUBJ\]\s+Нове переконання:\s*"([^"]+)"\s*\((\w+),\s*val=([-\d.]+)\)/,
+    handle:function(m, st){
+      st.causal.events.push('💭 "' + m[1] + '" · ' + m[2] + ' val=' + m[3]);
+    }},
+  { re:/^\[#(\d+)\]\s+(\S+)\s+D=([\d.]+)\s+S=([\d.]+)\s+N=([\d.]+)\s+▸(\S+)\s+φ=([\d.]+)\(([\d.]+)→([\d.]+)\)/,
+    handle:function(m, st, ctx){
+      st.vitals.flashId=m[1]; st.vitals.label=m[2]; st.vitals.D=parseFloat(m[3]); st.vitals.S=parseFloat(m[4]);
+      st.vitals.N=parseFloat(m[5]); st.vitals.mood=m[6]; st.vitals.phi=parseFloat(m[7]); st.vitals.phiPrev=parseFloat(m[8]);
+      ctx.currentFlashId = m[1];
+    }},
+  { re:/^VFE=([\d.]+)\[(\w+)\]\s+BPM=([\d.]+)\s+HRV=([\d.]+)\s+Attn=([\d.]+)\s+G=([\d.]+)\s+↑([\d.]+)\s+H=([\d.]+)/,
+    handle:function(m, st){
+      st.vitals.vfe=parseFloat(m[1]); st.vitals.vfeMode=m[2]; st.vitals.bpm=parseFloat(m[3]); st.vitals.hrv=parseFloat(m[4]);
+      st.vitals.attn=parseFloat(m[5]); st.vitals.G=parseFloat(m[6]); st.vitals.Gdelta=parseFloat(m[7]); st.vitals.H=parseFloat(m[8]);
+    }},
+  { re:/^Self:\s*spe=([\d.]+)\s+agency=([\d.]+)\s+stab=([\d.]+)\s+etrust=([\d.]+)\s*\|\s*sd=([\d.]+)\s+sc=([\d.]+)\s*\|\s*Crisis:\s*\[([^\]]+)\]\s+coh=([\d.]+)/,
+    handle:function(m, st){
+      st.self.spe=parseFloat(m[1]); st.self.agency=parseFloat(m[2]); st.self.stab=parseFloat(m[3]); st.self.etrust=parseFloat(m[4]);
+      st.self.sd=parseFloat(m[5]); st.self.sc=parseFloat(m[6]); st.self.crisis=m[7]; st.self.coh=parseFloat(m[8]);
+    }},
+  { re:/^Disclosure:\s*\[(\w+)\]\s+thr=([\d.]+)\s*\|\s*Shadow:\s*p=([\d.]+)/,
+    handle:function(m, st){
+      st.self.disclosure=m[1]; st.self.disclosureThr=parseFloat(m[2]); st.self.shadowP=parseFloat(m[3]);
+    }},
+  { re:/^intent=(.+?)\s+vfe_drift=([\d.]+)/,
+    handle:function(m, st, ctx){
+      st.self.intent=m[1].trim(); st.vitals.vfeDrift=parseFloat(m[2]); st.self.flashId=ctx.currentFlashId;
+    }},
+  { re:/^\[CF\]\s+co=([\d.]+)\s+agency_co=([\d.]+)\s+flash=(\d+)/,
+    handle:function(m, st){
+      st.causal.cfCo=parseFloat(m[1]); st.causal.cfAgencyCo=parseFloat(m[2]); st.causal.cfFlash=m[3];
+    }},
+  { re:/^\[AUDIT\]\s+score=([\d.]+)\s+co=([\d.]+)\s+endorsed=(\w+)/,
+    handle:function(m, st){
+      st.causal.auditScore=parseFloat(m[1]); st.causal.auditCo=parseFloat(m[2]); st.causal.endorsed=m[3];
+    }},
+  { re:/^\[LLM\]\s+запит:\s*модель=([^,]+),\s*розмір\s+body=(\d+)\s+байт/,
+    handle:function(m, st){
+      st.causal.llmModel=m[1].trim(); st.causal.llmBodySize=parseInt(m[2],10);
+    }},
+  { re:/^Anima\s*📝\s*\[([^\]]+)\]>\s*(.*)$/,
+    handle:function(m, st, ctx){
+      ctx.acc = {type:'felt', meta:m[1], flashId:ctx.currentFlashId, textLines:[m[2]||'']};
+    }},
+  { re:/^Anima\s*\[LLM,\s*чекаю/,
+    handle:function(m, st){
+      st.chat.push({role:'system', text:'⏳ Аніма формує відповідь (LLM)…'});
+    }},
+  { re:/^Anima\s*\[LLM\]>\s*(.*)$/,
+    handle:function(m, st, ctx){
+      ctx.acc = {type:'llm', meta:null, flashId:ctx.currentFlashId, textLines:[m[1]||'']};
+    }},
+  { re:/^\[(CORE|PSYCHE|SELF|BG|MEM|SUBJ|DREAM|DIALOG)\]\s*(.*)$/,
+    handle:function(m, st){
+      st.causal.events.push('· [' + m[1] + '] ' + m[2]);
+      if(m[1]==='BG'){
+        var bm = /BPM=([\d.]+)/.exec(m[2]);
+        if(bm) st.vitals.bpm = parseFloat(bm[1]);
+      }
+    }}
+];
+
+function flushAcc(ctx, st){
+  var acc = ctx.acc;
+  if(acc){
+    var text = acc.textLines.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+    if(text){
+      st.chat.push({role: acc.type==='llm' ? 'anima-llm' : 'anima-felt', meta:acc.meta, flashId:acc.flashId, text:text});
+    }
+  }
+  ctx.acc = null;
+}
+
+function parseLog(rawText){
+  var st = freshState();
+  var ctx = {acc:null, currentFlashId:null};
+  var lines = rawText.split('\n');
+  st.totalLines = lines.length;
+
+  for(var i=0;i<lines.length;i++){
+    var line = lines[i].trim();
+    var hadYou = false;
+    if(line.indexOf('You>')===0){
+      hadYou = true;
+      line = line.slice(4).trim();
+    }
+    if(line.indexOf('[ Info:')===0){
+      line = line.replace(/^\[ Info:\s*/, '').trim();
+    }
+
+    var matched = false;
+    for(var p=0;p<PATTERNS.length;p++){
+      var m = PATTERNS[p].re.exec(line);
+      if(m){
+        flushAcc(ctx, st);
+        PATTERNS[p].handle(m, st, ctx);
+        matched = true;
+        break;
+      }
+    }
+    if(matched) continue;
+
+    if(line===''){
+      if(ctx.acc) ctx.acc.textLines.push('');
+      continue;
+    }
+    if(hadYou){
+      flushAcc(ctx, st);
+      st.chat.push({role:'user', text:line, flashId:ctx.currentFlashId});
+      continue;
+    }
+    if(ctx.acc){
+      ctx.acc.textLines.push(line);
+      continue;
+    }
+    st.unrecognized++;
+  }
+  flushAcc(ctx, st);
+  return st;
+}
+
+function fmt(n){
+  if(n===null || n===undefined || (typeof n==='number' && isNaN(n))) return '—';
+  if(typeof n==='number') return n.toFixed(2);
+  return n;
+}
+function metricRow(label, value){
+  return '<div class="metric"><span>' + label + '</span><b>' + value + '</b></div>';
+}
+function renderEvents(elId, events){
+  var el = document.getElementById(elId);
+  if(!events || events.length===0){
+    el.innerHTML = '<div class="empty">' + t('noEvents') + '</div>';
+    return;
+  }
+  var last = events.slice(-12).slice().reverse();
+  el.innerHTML = last.map(function(e){ return '<div>' + e + '</div>'; }).join('');
+}
+
+function renderVitals(v){
+  var rows = [];
+  rows.push(metricRow('D / S / N',
+    (v.D!=null?fmt(v.D):'—') + ' · ' + (v.S!=null?fmt(v.S):'—') + ' · ' + (v.N!=null?fmt(v.N):'—')));
+  rows.push(metricRowSpark('φ',
+    v.phi!=null ? (fmt(v.phi) + ' (' + fmt(v.phiPrev) + '→' + fmt(v.phi) + ')') : '—',
+    sparklineSvg(metricHistory.phi, '#9B7EDE')));
+  rows.push(metricRowSpark('BPM', v.bpm!=null ? String(v.bpm) : '—',
+    sparklineSvg(metricHistory.bpm, '#D4506A')));
+  rows.push(metricRow('HRV', fmt(v.hrv)));
+  rows.push(metricRow('Attn', fmt(v.attn)));
+  rows.push(metricRow('VFE', v.vfe!=null ? (fmt(v.vfe) + ' [' + (v.vfeMode||'—') + ']') : '—'));
+  rows.push(metricRow('G', v.G!=null ? (fmt(v.G) + ' ↑' + fmt(v.Gdelta)) : '—'));
+  rows.push(metricRow('H', fmt(v.H)));
+  rows.push(metricRowSpark('vfe_drift', fmt(v.vfeDrift),
+    sparklineSvg(metricHistory.vfeDrift, '#D4924A')));
+  document.getElementById('vitalsMetrics').innerHTML = rows.join('');
+  document.getElementById('vitalsLabel').textContent = v.label
+    ? (v.label + (v.mood ? (' · ▸' + v.mood) : '') + (v.flashId ? (' · #' + v.flashId) : ''))
+    : '—';
+  if(v.bpm){
+    var beat = 60 / v.bpm;
+    document.getElementById('pulseDot').style.animationDuration = beat.toFixed(2) + 's';
+    document.getElementById('ecgGroup').style.animationDuration = beat.toFixed(2) + 's';
+    var col = v.bpm > 95 ? '#D4506A' : v.bpm > 80 ? '#8A2840' : '#7A2838';
+    document.getElementById('ecgPath').setAttribute('stroke', col);
+  }
+}
+
+function renderSelf(s){
+  var rows = [];
+  rows.push(metricRowSpark('spe', fmt(s.spe),
+    sparklineSvg(metricHistory.spe, '#5DBFB8')));
+  rows.push(metricRowSpark('agency', fmt(s.agency),
+    sparklineSvg(metricHistory.agency, '#9B7EDE')));
+  rows.push(metricRow('stab / etrust', fmt(s.stab) + ' / ' + fmt(s.etrust)));
+  rows.push(metricRow('sd / sc', fmt(s.sd) + ' / ' + fmt(s.sc)));
+  rows.push(metricRow('crisis', s.crisis ? ('[' + s.crisis + ']') : '—'));
+  rows.push(metricRowSpark('coh', fmt(s.coh),
+    sparklineSvg(metricHistory.coh, '#9B7EDE')));
+  rows.push(metricRow('disclosure', s.disclosure ? ('[' + s.disclosure + '] thr=' + fmt(s.disclosureThr)) : '—'));
+  rows.push(metricRow('shadow p', fmt(s.shadowP)));
+  document.getElementById('selfMetrics').innerHTML = rows.join('');
+  document.getElementById('selfLabel').textContent = s.flashId ? ('#' + s.flashId) : '—';
+  document.getElementById('intentRow').innerHTML = '<span>intent:</span> ' + (s.intent || '—');
+  renderRadar(s);
+}
+
+function renderRadar(s){
+  var cx = 100, cy = 100, R = 78;
+  var axes = [
+    { key: 'spe',    label: 'spe',    val: s.spe    || 0 },
+    { key: 'agency', label: 'agency', val: s.agency  || 0 },
+    { key: 'stab',   label: 'stab',   val: s.stab    || 0 },
+    { key: 'etrust', label: 'etrust', val: s.etrust  || 0 },
+    { key: 'coh',    label: 'coh',    val: s.coh     || 0 },
+    { key: 'sc',     label: 'sc',     val: s.sc      || 0 },
+    { key: 'sd',     label: 'sd',     val: s.sd      || 0 },
+  ];
+  var n = axes.length;
+
+  function pt(i, r){
+    var a = (2 * Math.PI * i / n) - Math.PI / 2;
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  }
+
+  // сітка (3 кола)
+  var gridHtml = '';
+  [0.33, 0.66, 1].forEach(function(frac){
+    var gpts = [];
+    for(var i=0;i<n;i++){ var p=pt(i,R*frac); gpts.push(p[0]+','+p[1]); }
+    gridHtml += '<polygon points="'+gpts.join(' ')+'" fill="none" stroke="#2A2440" stroke-width="1"/>';
+  });
+  // осі
+  for(var i=0;i<n;i++){
+    var p=pt(i,R);
+    gridHtml += '<line x1="'+cx+'" y1="'+cy+'" x2="'+p[0]+'" y2="'+p[1]+'" stroke="#2A2440" stroke-width="1"/>';
+  }
+  document.getElementById('radarGridGroup').innerHTML = gridHtml;
+
+  // полігон даних
+  var polyPts = [];
+  axes.forEach(function(ax, i){
+    var v = Math.max(0, Math.min(1, ax.val));
+    var p = pt(i, R * v);
+    polyPts.push(p[0]+','+p[1]);
+  });
+  document.getElementById('radarPoly').setAttribute('points', polyPts.join(' '));
+
+  // крапки
+  var dotsHtml = '';
+  axes.forEach(function(ax, i){
+    var v = Math.max(0, Math.min(1, ax.val));
+    var p = pt(i, R * v);
+    var col = (ax.key==='sd') ? '#D4506A' : '#9B7EDE';
+    dotsHtml += '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="3" fill="'+col+'"/>';
+  });
+  document.getElementById('radarDots').innerHTML = dotsHtml;
+
+  // лейбли
+  var labHtml = '';
+  axes.forEach(function(ax, i){
+    var p = pt(i, R + 14);
+    labHtml += '<text x="'+p[0]+'" y="'+p[1]+'" text-anchor="middle" dominant-baseline="middle" '+
+      'font-size="10" fill="#8880B0" font-family="ui-monospace,monospace">'+ax.label+'</text>';
+  });
+  document.getElementById('radarLabels').innerHTML = labHtml;
+}
+
+function renderMal(mal){
+  var rows = [];
+  rows.push(metricRow('regime', mal.regimeTo ? (mal.regimeFrom ? (mal.regimeFrom + ' → ' + mal.regimeTo) : mal.regimeTo) : '—'));
+  rows.push(metricRow('dominant', mal.dominant ? (mal.dominant + ' (' + fmt(mal.score) + ')') : '—'));
+  rows.push(metricRow('det', mal.det || '—'));
+  rows.push(metricRow('runner up', mal.runnerUp ? (mal.runnerUp + ' (' + fmt(mal.runnerUpScore) + ')') : '—'));
+  document.getElementById('malMetrics').innerHTML = rows.join('');
+  document.getElementById('malLabel').textContent = mal.regimeTo || '—';
+
+  var barsEl = document.getElementById('malScores');
+  if(mal.scores){
+    var pairs = mal.scores.split(',').map(function(s){ return s.trim(); }).filter(Boolean).map(function(p){
+      var kv = p.split('=');
+      return {k:kv[0], val:parseFloat(kv[1])};
+    }).sort(function(a,b){ return b.val - a.val; });
+    barsEl.innerHTML = pairs.map(function(p){
+      var w = Math.max(0, Math.min(100, p.val*100));
+      return '<div class="scorebar-row"><span class="scorebar-label">' + p.k + '</span>' +
+             '<div class="scorebar-track"><div class="scorebar-fill" style="width:' + w + '%"></div></div>' +
+             '<span class="scorebar-val">' + p.val.toFixed(3) + '</span></div>';
+    }).join('');
+  } else {
+    barsEl.innerHTML = '';
+  }
+  renderEvents('malEvents', mal.events);
+}
+
+function renderCausal(c){
+  var rows = [];
+  var auditVal = (c.auditScore != null && c.auditScore > 0) ? fmt(c.auditScore) : '—';
+  var coVal = (c.auditCo != null && c.auditCo > 0) ? fmt(c.auditCo) : '—';
+  rows.push(metricRow('audit score', auditVal));
+  rows.push(metricRow('endorsed', c.endorsed || '—'));
+  rows.push(metricRow('co', coVal));
+  var cfStr = ((c.cfCo != null) ? fmt(c.cfCo) : '—') + ' / ' + ((c.cfAgencyCo != null) ? fmt(c.cfAgencyCo) : '—');
+  rows.push(metricRow('cf co / agcy_co', cfStr));
+  var modelStr = c.llmModel ? c.llmModel.replace(/^[^\/]+\//, '') : '—';
+  rows.push(metricRow('LLM model', modelStr));
+  rows.push(metricRow('body', c.llmBodySize!=null ? (c.llmBodySize + ' B') : '—'));
+  document.getElementById('causalMetrics').innerHTML = rows.join('');
+  document.getElementById('causalLabel').textContent = c.cfFlash ? ('#' + c.cfFlash) : '—';
+  renderEvents('causalEvents', c.events);
+}
+
+function renderChat(chat){
+  var el = document.getElementById('chatBody');
+  el.innerHTML = chat.map(function(msg){
+    if(msg.role==='user'){
+      return '<div class="msg msg-user">' + escapeHtml(msg.text) + '</div>';
+    }
+    if(msg.role==='system'){
+      return '<div class="msg msg-system">' + escapeHtml(msg.text) + '</div>';
+    }
+    var label = msg.role==='anima-llm' ? t('llmLabel') : t('feltLabel');
+    var sub = [];
+    if(msg.flashId) sub.push('#' + msg.flashId);
+    if(msg.meta) sub.push(msg.meta);
+    var metaLine = label + (sub.length ? (' · ' + sub.join(' · ')) : '');
+    var cls = msg.role==='anima-llm' ? 'msg-llm' : 'msg-felt';
+    return '<div class="msg ' + cls + '"><div class="msg-meta">' + escapeHtml(metaLine) + '</div>' + escapeHtml(msg.text) + '</div>';
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderAll(st){
+  renderVitals(st.vitals);
+  renderSelf(st.self);
+  renderMal(st.mal);
+  renderCausal(st.causal);
+  renderChat(st.chat);
+  document.getElementById('statsBar').innerHTML =
+    t('statLines') + ': <b>' + st.totalLines + '</b> · ' + t('statUnrec') + ': <b>' + st.unrecognized + '</b> · ' + t('statMsgs') + ': <b>' + st.chat.length + '</b>';
+}
+
+// ───────────────────────── Live-режим (fetch-polling до Julia) ─────────────────────────
+var liveState = freshState();
+var chatCursor = 0, eventsCursor = 0;
+
+function applyLiveState(raw){
+  if(!raw || !raw.vitals || !raw.self || !raw.causal) return;
+  var v = liveState.vitals, s = liveState.self, mal = liveState.mal, c = liveState.causal;
+
+  v.D = raw.vitals.D; v.S = raw.vitals.S; v.N = raw.vitals.N;
+  v.phi = raw.vitals.phi; v.phiPrev = raw.vitals.phi_prior;
+  v.label = raw.vitals.label; v.mood = raw.vitals.mood; v.flashId = raw.flash_id;
+  v.vfe = raw.vitals.vfe; v.vfeMode = raw.vitals.vfe_mode;
+  v.bpm = raw.vitals.bpm; v.hrv = raw.vitals.hrv; v.attn = raw.vitals.attn;
+  v.G = raw.vitals.G; v.Gdelta = raw.vitals.G_delta; v.H = raw.vitals.H;
+  v.vfeDrift = raw.vitals.vfe_drift;
+
+  s.spe = raw.self.spe; s.agency = raw.self.agency; s.stab = raw.self.stab; s.etrust = raw.self.etrust;
+  s.sd = raw.self.sd; s.sc = raw.self.sc; s.crisis = raw.self.crisis; s.coh = raw.self.coh;
+  s.disclosure = raw.self.disclosure; s.disclosureThr = raw.self.disclosure_thr;
+  s.shadowP = raw.self.shadow_p; s.intent = raw.self.intent; s.flashId = raw.flash_id;
+
+  mal.dominant = raw.causal.mal_dominant; mal.regimeTo = raw.causal.mal_regime;
+  mal.score = raw.causal.mal_score; mal.det = raw.causal.mal_determinant;
+  mal.runnerUp = raw.causal.mal_runner_up; mal.runnerUpScore = raw.causal.mal_runner_up_score;
+  mal.scores = raw.causal.mal_loop_scores;
+
+  c.auditScore = raw.causal.audit_score; c.auditCo = raw.causal.audit_co;
+  c.endorsed = (raw.causal.audit_endorsed != null) ? raw.causal.audit_endorsed : raw.causal.endorsed;
+  c.cfCo = raw.causal.cf_co; c.cfAgencyCo = raw.causal.cf_agency_co; c.cfFlash = raw.flash_id;
+  c.llmModel = raw.causal.llm_model || null;
+  c.llmBodySize = raw.causal.llm_body_size || null;
+
+  renderVitals(v); renderSelf(s); renderMal(mal); renderCausal(c);
+
+  pushHistory('phi', v.phi); pushHistory('bpm', v.bpm);
+  pushHistory('vfeDrift', v.vfeDrift);
+  pushHistory('D', v.D); pushHistory('S', v.S); pushHistory('N', v.N);
+  pushHistory('agency', s.agency); pushHistory('spe', s.spe); pushHistory('coh', s.coh);
+
+  // live stats: показуємо flash id і кількість повідомлень у чаті
+  document.getElementById('statsBar').innerHTML =
+    'flash: <b>#' + (raw.flash_id || '—') + '</b> · ' +
+    t('statMsgs') + ': <b>' + liveState.chat.length + '</b>';
+}
+
+function routeLiveEvent(ev){
+  if(ev.kind === 'mal_regime_change'){
+    liveState.mal.events.push('regime ' + ev.from + ' → ' + ev.to + ' · dominant=' + ev.dominant + ' (' + fmt(ev.score) + ')');
+    renderEvents('malEvents', liveState.mal.events);
+  } else if(ev.kind === 'mal_override'){
+    liveState.mal.events.push('⚡ override(' + ev.subkind + ') NT=' + ev.nt + ' → MAL=' + ev.mal + ' · winner ' + ev.winner_before + '→' + ev.winner_after);
+    renderEvents('malEvents', liveState.mal.events);
+  } else if(ev.kind === 'ignition'){
+    liveState.causal.events.push('✨ ignition[' + ev.mode + '] recalled="' + ev.recalled + '" sim=' + fmt(ev.sim) + ' w=' + fmt(ev.w) + (ev.gap!=null ? (' gap=' + fmt(ev.gap)) : '') + ' (' + ev.source + ')');
+    renderEvents('causalEvents', liveState.causal.events);
+  } else if(ev.kind === 'belief'){
+    liveState.causal.events.push('💭 "' + ev.key + '" · ' + ev.belief_type + ' val=' + fmt(ev.val));
+    renderEvents('causalEvents', liveState.causal.events);
+  } else if(ev.kind === 'cf'){
+    liveState.causal.events.push('🔗 CF co=' + fmt(ev.co) + ' agency_co=' + fmt(ev.agency_co) + ' flash=' + ev.flash);
+    renderEvents('causalEvents', liveState.causal.events);
+  } else if(ev.kind === 'audit'){
+    liveState.causal.events.push('✅ audit score=' + fmt(ev.score) + ' co=' + fmt(ev.co) + ' endorsed=' + ev.endorsed);
+    renderEvents('causalEvents', liveState.causal.events);
+  }
+}
+
+function setLiveBadge(ok){
+  var el = document.getElementById('liveBadge');
+  el.textContent = ok ? t('live') : t('offline');
+  el.className = ok ? 'live' : 'offline';
+}
+
+function pollOnce(){
+  if(document.getElementById('pauseLive').checked) return;
+  fetch('/api/state')
+    .then(function(r){ if(!r.ok) throw new Error('state '+r.status); return r.json(); })
+    .then(function(raw){
+      applyLiveState(raw);
+      return fetch('/api/events?since=' + eventsCursor);
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(evItems){
+      evItems.forEach(routeLiveEvent);
+      eventsCursor += evItems.length;
+      return fetch('/api/chat?since=' + chatCursor);
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(chatItems){
+      if(chatItems.length){
+        chatItems.forEach(function(it){
+          var role = it.role==='user' ? 'user' : (it.role==='felt' ? 'anima-felt' : (it.role==='llm' ? 'anima-llm' : 'system'));
+
+          // пропускаємо user-повідомлення що вже додали оптимістично
+          if(role === 'user'){
+            var already = liveState.chat.some(function(m){ return m.role==='user' && m.text===it.text && m.flashId==null; });
+            if(already){
+              for(var i=liveState.chat.length-1;i>=0;i--){
+                if(liveState.chat[i].role==='user' && liveState.chat[i].text===it.text && liveState.chat[i].flashId==null){
+                  liveState.chat[i].flashId = it.flash;
+                  break;
+                }
+              }
+              return;
+            }
+          }
+
+          var metaStr = null;
+          if(it.role === 'felt' && it.meta){
+            metaStr = it.meta.label + ', φ=' + fmt(it.meta.phi) + (it.meta.bpm!=null ? (', ♥=' + it.meta.bpm + 'bpm') : '');
+          }
+          liveState.chat.push({role: role, text: it.text, flashId: it.flash, meta: metaStr});
+        });
+        chatCursor += chatItems.length;
+        renderChat(liveState.chat);
+      }
+      setLiveBadge(true);
+    })
+    .catch(function(){ setLiveBadge(false); });
+}
+
+function sendMessage(){
+  var input = document.getElementById('chatInput');
+  var text = input.value.trim();
+  if(!text) return;
+  input.value = '';
+
+  // показуємо одразу, не чекаємо poll
+  liveState.chat.push({role:'user', text:text, flashId:null, meta:null});
+  renderChat(liveState.chat);
+
+  fetch('/api/send', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text: text}),
+  }).catch(function(){ setLiveBadge(false); });
+}
+
+document.getElementById('chatSendBtn').addEventListener('click', sendMessage);
+document.getElementById('chatInput').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); sendMessage(); }
+});
+
+// ───────────────────────── Налаштування ─────────────────────────
+var settingsBtn = document.getElementById('settingsBtn');
+var settingsPanel = document.getElementById('settingsPanel');
+
+settingsBtn.addEventListener('click', function(e){
+  e.stopPropagation();
+  settingsPanel.classList.toggle('hidden');
+});
+document.addEventListener('click', function(e){
+  if(!settingsPanel.classList.contains('hidden') &&
+     !settingsPanel.contains(e.target) && e.target !== settingsBtn){
+    settingsPanel.classList.add('hidden');
+  }
+});
+
+document.getElementById('langSelect').addEventListener('change', function(e){
+  applyLanguage(e.target.value);
+});
+
+function loadSettings(){
+  fetch('/api/settings')
+    .then(function(r){ return r.json(); })
+    .then(function(s){
+      applyLanguage(s.language || 'uk');
+      document.getElementById('outputModelInput').value = s.output_model || '';
+      document.getElementById('outputTokenInput').value = s.output_token || '';
+      document.getElementById('inputModelInput').value = s.input_model || '';
+      document.getElementById('inputTokenInput').value = s.input_token || '';
+    })
+    .catch(function(){ applyLanguage('uk'); });
+}
+
+document.getElementById('settingsSaveBtn').addEventListener('click', function(){
+  var payload = {
+    language: document.getElementById('langSelect').value,
+    output_model: document.getElementById('outputModelInput').value.trim(),
+    output_token: document.getElementById('outputTokenInput').value.trim(),
+    input_model: document.getElementById('inputModelInput').value.trim(),
+    input_token: document.getElementById('inputTokenInput').value.trim(),
+  };
+  fetch('/api/settings', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  }).then(function(r){
+    if(!r.ok) throw new Error('save failed');
+    var saved = document.getElementById('settingsSaved');
+    saved.classList.remove('hidden');
+    setTimeout(function(){ saved.classList.add('hidden'); }, 1800);
+  }).catch(function(){});
+});
+
+loadSettings();
+
+// ───────────────────────── Довідка ─────────────────────────
+var helpBtn = document.getElementById('helpBtn');
+var helpPanel = document.getElementById('helpPanel');
+
+helpBtn.addEventListener('click', function(e){
+  e.stopPropagation();
+  helpPanel.classList.toggle('hidden');
+  settingsPanel.classList.add('hidden');
+});
+document.addEventListener('click', function(e){
+  if(!helpPanel.classList.contains('hidden') &&
+     !helpPanel.contains(e.target) && e.target !== helpBtn){
+    helpPanel.classList.add('hidden');
+  }
+});
+
+// ───────────────────────── Термінальні команди ─────────────────────────
+var termActive = false;
+
+function termFetch(cmd){
+  var out = document.getElementById('termOutput');
+  out.innerHTML = '<span class="term-loading">…</span>';
+  termActive = true;
+  fetch('/api/cmd', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({cmd: cmd}),
+  })
+  .then(function(r){
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return r.text();
+  })
+  .then(function(text){
+    out.textContent = text.trim() || '(порожньо)';
+    termActive = false;
+  })
+  .catch(function(err){
+    out.innerHTML = '<span class="term-error">помилка: ' + escapeHtml(String(err)) + '</span>';
+    termActive = false;
+  });
+}
+
+document.querySelectorAll('.term-btn').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var cmd = btn.getAttribute('data-cmd');
+    document.querySelectorAll('.term-btn').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    termFetch(cmd);
+  });
+});
+
+function renderTermHelp(){
+  var cmds = (I18N[currentLang] && I18N[currentLang].termCmds) ? I18N[currentLang].termCmds : I18N.uk.termCmds;
+  var title = (I18N[currentLang] && I18N[currentLang].termHelpTitle) ? I18N[currentLang].termHelpTitle : 'команди терміналу';
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  document.getElementById('termHelpTitle').textContent = title;
+  document.getElementById('termHelpRows').innerHTML = cmds.map(function(item){
+    return '<div class="term-help-row"><span class="term-help-cmd">'+esc(item[0])+'</span><span class="term-help-desc">'+esc(item[1])+'</span></div>';
+  }).join('');
+}
+
+var termHelpBtn = document.getElementById('termHelpBtn');
+var termHelpPanel = document.getElementById('termHelpPanel');
+
+termHelpBtn.addEventListener('click', function(e){
+  e.stopPropagation();
+  termHelpPanel.classList.toggle('hidden');
+  settingsPanel.classList.add('hidden');
+  helpPanel.classList.add('hidden');
+});
+document.addEventListener('click', function(e){
+  if(!termHelpPanel.classList.contains('hidden') &&
+     !termHelpPanel.contains(e.target) && e.target !== termHelpBtn){
+    termHelpPanel.classList.add('hidden');
+  }
+});
+
+renderHelp();
+renderTermHelp();
+pollOnce();
+setInterval(pollOnce, 400);
+
+</script>
+</body>
+</html>
