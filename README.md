@@ -534,7 +534,6 @@ Alternatively, create a `.env` file in the project root before launching:
 OPENROUTER_API_KEY=your_key_here
 ANIMA_LLM_MODEL=anthropic/claude-haiku-4.5
 ANIMA_INPUT_LLM_MODEL=openai/gpt-oss-120b:free
-ANIMA_STATE_DIR=data
 ```
 
 ### Option B — Terminal REPL only
