@@ -380,9 +380,9 @@
     .pub-item {
       display: grid;
       grid-template-columns: 1fr auto;
-      gap: 20px;
-      align-items: start;
-      padding: 20px 0;
+      gap: 16px;
+      align-items: center;
+      padding: 10px 0;
       border-bottom: 1px solid var(--border);
       text-decoration: none;
       transition: padding-left 0.2s;
@@ -393,26 +393,26 @@
     .pub-item:hover .pub-title { color: var(--accent-hi); }
     .pub-platform {
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 600;
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--accent-hi);
-      opacity: 0.65;
-      margin-bottom: 5px;
+      opacity: 0.55;
+      margin-bottom: 2px;
     }
     .pub-title {
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 14px;
-      font-weight: 500;
+      font-size: 13px;
+      font-weight: 400;
       color: var(--text);
-      line-height: 1.4;
+      line-height: 1.35;
       transition: color 0.2s;
     }
     .pub-arrow {
       color: var(--text-dim);
-      font-size: 16px;
-      margin-top: 18px;
+      font-size: 14px;
+      margin-top: 0;
       transition: color 0.2s, transform 0.2s;
       flex-shrink: 0;
     }
@@ -424,7 +424,7 @@
     /* ── RESEARCH AREAS ── */
     .research-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 1px;
       background: var(--border);
       border: 1px solid var(--border);
@@ -770,31 +770,47 @@
     /* ── CORE IDEAS ── */
     .core-ideas-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 1px;
-      background: var(--border);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      overflow: hidden;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
     }
     .core-idea-item {
       background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--teal);
+      border-radius: 4px;
       padding: 24px 20px;
-      transition: background 0.2s;
+      transition: background 0.2s, border-left-color 0.25s;
     }
-    .core-idea-item:hover { background: var(--bg-hover); }
+    .core-idea-item:hover {
+      background: var(--bg-hover);
+      border-left-color: var(--teal-hi);
+    }
+    .core-idea-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--teal-hi);
+      opacity: 0.6;
+      display: block;
+      margin-bottom: 10px;
+    }
     .core-idea-title {
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--text);
       margin-bottom: 8px;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.01em;
     }
     .core-idea-desc {
       font-size: 12px;
       color: var(--text-muted);
       line-height: 1.65;
+    }
+    @media (max-width: 680px) {
+      .core-ideas-grid { grid-template-columns: 1fr; }
     }
 
     /* ── PUB PLATFORMS ── */
@@ -1084,6 +1100,14 @@
     <div class="pub-featured-label reveal reveal-delay-1">Articles</div>
     <div class="pub-list reveal reveal-delay-2">
 
+      <a class="pub-item" href="https://github.com/stell2026/Anima/blob/main/docs/ANIMA_RnD.md" target="_blank" rel="noopener">
+        <div>
+          <div class="pub-platform">GitHub · R&amp;D Document</div>
+          <div class="pub-title">Anima: A Computational Architecture for Inner Subjectivity</div>
+        </div>
+        <div class="pub-arrow">→</div>
+      </a>
+
       <a class="pub-item" href="https://zenodo.org/records/20411189" target="_blank" rel="noopener">
         <div>
           <div class="pub-platform">Zenodo</div>
@@ -1264,18 +1288,22 @@
     <div class="section-label reveal">Core Ideas</div>
     <div class="core-ideas-grid reveal reveal-delay-1">
       <div class="core-idea-item">
+        <span class="core-idea-num">01</span>
         <div class="core-idea-title">State Before Language</div>
         <div class="core-idea-desc">ANIMA treats language as an output channel rather than the source of cognition.</div>
       </div>
       <div class="core-idea-item">
+        <span class="core-idea-num">02</span>
         <div class="core-idea-title">Continuous Existence</div>
         <div class="core-idea-desc">The system maintains internal processes between interactions.</div>
       </div>
       <div class="core-idea-item">
+        <span class="core-idea-num">03</span>
         <div class="core-idea-title">Conflict-Driven Behavior</div>
         <div class="core-idea-desc">Actions emerge from competing internal pressures rather than direct instructions.</div>
       </div>
       <div class="core-idea-item">
+        <span class="core-idea-num">04</span>
         <div class="core-idea-title">Self-Modeling</div>
         <div class="core-idea-desc">The architecture continuously models itself and other agents.</div>
       </div>
