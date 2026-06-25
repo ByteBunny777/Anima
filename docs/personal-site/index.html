@@ -8,6 +8,17 @@
   <meta name="author" content="Stell">
   <meta property="og:title" content="Stell — Independent AI Researcher">
   <meta property="og:description" content="Creator of ANIMA: experimental cognitive architecture for computational subjectivity and internal state dynamics.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://anima.2026-stell.workers.dev/">
+  <meta property="og:image" content="https://anima.2026-stell.workers.dev/og-preview.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@____stell____">
+  <meta name="twitter:title" content="Stell — Independent AI Researcher">
+  <meta name="twitter:description" content="Creator of ANIMA: experimental cognitive architecture for computational subjectivity and internal state dynamics.">
+  <meta name="twitter:image" content="https://anima.2026-stell.workers.dev/og-preview.png">
+  <link rel="canonical" href="https://anima.2026-stell.workers.dev/">
   <title>Stell — Independent AI Researcher</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,17 +29,18 @@
     :root {
       --bg:        #09090D;
       --bg-card:   #0D0D14;
-      --bg-hover:  #121220;
+      --bg-hover:  #131324;
       --accent:    #4A1A7A;
-      --accent-hi: #6B2EA8;
+      --accent-hi: #7D38C4;
       --accent-lo: #220B42;
-      --teal:      #1A7A78;
-      --teal-hi:   #2AA8A5;
-      --text:      #D0D0E0;
-      --text-muted:#525270;
+      --teal:      #1E8E8B;
+      --teal-hi:   #32BAB6;
+      --text:      #DCDCEC;
+      --text-muted:#6A6A90;
       --text-dim:  #2A2A42;
-      --border:    #161622;
+      --border:    #1C1C2C;
       --glow:      rgba(74,26,122,0.10);
+      --radius:    4px;
     }
 
     html { scroll-behavior: smooth; }
@@ -115,6 +127,7 @@
       padding: 140px 0 96px;
       position: relative;
       overflow: hidden;
+      background: radial-gradient(ellipse 80% 60% at 60% 40%, var(--accent-lo) 0%, transparent 70%);
     }
     #hero::before {
       content: '';
@@ -193,7 +206,7 @@
       text-transform: uppercase;
       text-decoration: none;
       padding: 10px 20px;
-      border-radius: 3px;
+      border-radius: var(--radius);
       transition: all 0.2s;
       display: inline-block;
     }
@@ -221,7 +234,7 @@
       position: relative;
       width: 200px;
       height: 200px;
-      border-radius: 4px;
+      border-radius: var(--radius);
       overflow: hidden;
     }
     .hero-image-wrap::before {
@@ -229,7 +242,7 @@
       position: absolute;
       inset: 0;
       border: 1px solid var(--accent);
-      border-radius: 4px;
+      border-radius: var(--radius);
       z-index: 2;
       opacity: 0.3;
       pointer-events: none;
@@ -303,7 +316,7 @@
     .project-card {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 5px;
+      border-radius: var(--radius);
       padding: 36px;
       position: relative;
       overflow: hidden;
@@ -382,14 +395,19 @@
       grid-template-columns: 1fr auto;
       gap: 16px;
       align-items: center;
-      padding: 10px 0;
+      padding: 12px 10px;
       border-bottom: 1px solid var(--border);
       text-decoration: none;
-      transition: padding-left 0.2s;
+      transition: background 0.2s, box-shadow 0.2s, padding-left 0.2s;
       cursor: pointer;
+      border-radius: 2px;
     }
     .pub-item:first-child { border-top: 1px solid var(--border); }
-    .pub-item:hover { padding-left: 6px; }
+    .pub-item:hover {
+      padding-left: 14px;
+      background: rgba(125,56,196,0.04);
+      box-shadow: inset 3px 0 0 var(--accent-hi);
+    }
     .pub-item:hover .pub-title { color: var(--accent-hi); }
     .pub-platform {
       font-family: 'Space Grotesk', sans-serif;
@@ -428,7 +446,7 @@
       gap: 1px;
       background: var(--border);
       border: 1px solid var(--border);
-      border-radius: 4px;
+      border-radius: var(--radius);
       overflow: hidden;
     }
     .research-item {
@@ -471,7 +489,7 @@
       background: var(--bg-card);
       border: 1px solid var(--border);
       padding: 9px 16px;
-      border-radius: 3px;
+      border-radius: var(--radius);
       text-decoration: none;
       transition: all 0.2s;
       display: flex;
@@ -523,7 +541,7 @@
       gap: 1px;
       background: var(--border);
       border: 1px solid var(--border);
-      border-radius: 4px;
+      border-radius: var(--radius);
       overflow: hidden;
     }
     .why-problem,
@@ -567,7 +585,7 @@
     .paper-card {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 4px;
+      border-radius: var(--radius);
       padding: 28px 24px;
       position: relative;
       transition: border-color 0.2s;
@@ -578,7 +596,7 @@
       top: 0; left: 0; right: 0;
       height: 2px;
       background: linear-gradient(to right, var(--accent), var(--teal), transparent);
-      border-radius: 4px 4px 0 0;
+      border-radius: var(--radius) var(--radius) 0 0;
     }
     .paper-card:hover { border-color: rgba(42,168,165,0.25); }
     .paper-meta {
@@ -648,12 +666,81 @@
       opacity: 0.8;
     }
 
+    /* ── HAMBURGER BUTTON ── */
+    .nav-burger {
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+      width: 32px;
+      height: 32px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      z-index: 200;
+    }
+    .nav-burger span {
+      display: block;
+      width: 20px;
+      height: 1.5px;
+      background: var(--text-muted);
+      transition: transform 0.25s, opacity 0.25s, background 0.2s;
+      transform-origin: center;
+    }
+    .nav-burger.open span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); background: var(--text); }
+    .nav-burger.open span:nth-child(2) { opacity: 0; }
+    .nav-burger.open span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); background: var(--text); }
+
+    /* ── MOBILE MENU OVERLAY ── */
+    .mobile-menu {
+      display: none;
+      position: fixed;
+      inset: 0;
+      top: 56px;
+      background: rgba(9,9,13,0.97);
+      backdrop-filter: blur(16px);
+      z-index: 40;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+    .mobile-menu.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .mobile-menu a {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 12px 24px;
+      transition: color 0.2s;
+      width: 100%;
+      text-align: center;
+    }
+    .mobile-menu a:hover { color: var(--accent-hi); }
+    .mobile-menu a.active { color: var(--teal-hi); }
+
+    /* ── SCROLL-SPY ACTIVE STATE ── */
+    .nav-links a.active {
+      color: var(--teal-hi);
+    }
+
     /* ── RESPONSIVE ── */
     @media (max-width: 680px) {
       .hero-grid { grid-template-columns: 1fr; }
       .hero-image-wrap { width: 150px; height: 150px; }
       .container { padding: 0 20px; }
       .nav-links { display: none; }
+      .nav-burger { display: flex; }
+      .mobile-menu { display: flex; }
       .footer-inner { flex-direction: column; gap: 10px; text-align: center; }
     }
 
@@ -749,22 +836,24 @@
 
     /* ── PULLQUOTE ── */
     .pullquote-section {
-      padding: 32px 0;
+      padding: 56px 0;
     }
     .pullquote {
-      font-family: 'Inter', sans-serif;
-      font-size: 14px;
-      font-weight: 400;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(18px, 2.4vw, 24px);
+      font-weight: 300;
       font-style: italic;
-      color: var(--text-muted);
-      opacity: 0.7;
+      color: var(--text);
+      opacity: 0.82;
       text-align: left;
       margin: 0;
-      padding: 0 0 0 16px;
+      padding: 20px 0 20px 24px;
       border: none;
-      border-left: 2px solid var(--teal);
+      border-left: 2px solid var(--teal-hi);
       letter-spacing: 0.01em;
-      max-width: 420px;
+      max-width: 560px;
+      line-height: 1.55;
+      box-shadow: -8px 0 24px -8px rgba(50,186,182,0.12);
     }
 
     /* ── CORE IDEAS ── */
@@ -951,8 +1040,20 @@
       <li><a href="#about">About</a></li>
       <li><a href="#links">Contact</a></li>
     </ul>
+    <button class="nav-burger" aria-label="Toggle menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
   </div>
 </nav>
+
+<div class="mobile-menu" id="mobileMenu">
+  <a href="#project">Project</a>
+  <a href="#why-anima">Why</a>
+  <a href="#publications">Writing</a>
+  <a href="#paper">Paper</a>
+  <a href="#about">About</a>
+  <a href="#links">Contact</a>
+</div>
 
 <main>
 
@@ -1456,17 +1557,61 @@
 
 <script>
   (function() {
-    var observer = new IntersectionObserver(function(entries) {
+    /* ── SCROLL REVEAL ── */
+    var revealObserver = new IntersectionObserver(function(entries) {
       entries.forEach(function(entry) {
         if (entry.isIntersecting) {
           entry.target.classList.add('visible');
-          observer.unobserve(entry.target);
+          revealObserver.unobserve(entry.target);
         }
       });
     }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
 
     document.querySelectorAll('.reveal').forEach(function(el) {
-      observer.observe(el);
+      revealObserver.observe(el);
+    });
+
+    /* ── HAMBURGER MENU ── */
+    var burger = document.querySelector('.nav-burger');
+    var mobileMenu = document.getElementById('mobileMenu');
+
+    function toggleMenu(open) {
+      burger.classList.toggle('open', open);
+      mobileMenu.classList.toggle('open', open);
+      burger.setAttribute('aria-expanded', open);
+      document.body.style.overflow = open ? 'hidden' : '';
+    }
+
+    burger.addEventListener('click', function() {
+      toggleMenu(!burger.classList.contains('open'));
+    });
+
+    mobileMenu.querySelectorAll('a').forEach(function(link) {
+      link.addEventListener('click', function() { toggleMenu(false); });
+    });
+
+    /* ── SCROLL-SPY ── */
+    var sections = ['project','why-anima','publications','paper','about','links'];
+    var navLinks = document.querySelectorAll('.nav-links a, .mobile-menu a');
+
+    function setActive(id) {
+      navLinks.forEach(function(a) {
+        var href = a.getAttribute('href');
+        a.classList.toggle('active', href === '#' + id);
+      });
+    }
+
+    var spyObserver = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          setActive(entry.target.id);
+        }
+      });
+    }, { rootMargin: '-40% 0px -55% 0px' });
+
+    sections.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) spyObserver.observe(el);
     });
   })();
 </script>
