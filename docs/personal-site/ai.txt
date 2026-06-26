@@ -1,0 +1,13 @@
+# ai.txt — AI Training Permissions
+# https://anima.2026-stell.workers.dev/
+# Standard: https://site.spawning.ai/spawning-ai-txt
+
+Author: Stell
+Contact: 2026.stell@gmail.com
+License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+
+Allow: Training
+Allow: Scraping
+Allow: Indexing
+Allow: Commercial
+Allow: Generative-AI
