@@ -1037,6 +1037,7 @@ function renderAll(st){
 // ───────────────────────── Live-режим (fetch-polling до Julia) ─────────────────────────
 var liveState = freshState();
 var chatCursor = 0, eventsCursor = 0;
+var _polling = false;
 
 function applyLiveState(raw){
   if(!raw || !raw.vitals || !raw.self || !raw.causal) return;
@@ -1109,6 +1110,9 @@ function setLiveBadge(ok){
 
 function pollOnce(){
   if(document.getElementById('pauseLive').checked) return;
+  // захист від паралельних poll — якщо попередній ще не завершився, пропускаємо
+  if(_polling) return;
+  _polling = true;
   fetch('/api/state')
     .then(function(r){ if(!r.ok) throw new Error('state '+r.status); return r.json(); })
     .then(function(raw){
@@ -1127,18 +1131,21 @@ function pollOnce(){
         chatItems.forEach(function(it){
           var role = it.role==='user' ? 'user' : (it.role==='felt' ? 'anima-felt' : (it.role==='llm' ? 'anima-llm' : 'system'));
 
-          // пропускаємо user-повідомлення що вже додали оптимістично
+          // user: проставляємо flashId оптимістично доданому, або пропускаємо дублікат
           if(role === 'user'){
-            var already = liveState.chat.some(function(m){ return m.role==='user' && m.text===it.text && m.flashId==null; });
-            if(already){
-              for(var i=liveState.chat.length-1;i>=0;i--){
-                if(liveState.chat[i].role==='user' && liveState.chat[i].text===it.text && liveState.chat[i].flashId==null){
-                  liveState.chat[i].flashId = it.flash;
-                  break;
-                }
+            for(var i=liveState.chat.length-1;i>=0;i--){
+              if(liveState.chat[i].role==='user' && liveState.chat[i].text===it.text){
+                // вже є (з flashId або без) — проставляємо flash і пропускаємо
+                liveState.chat[i].flashId = it.flash;
+                return;
               }
-              return;
             }
+          }
+
+          // felt: дедуплікація по flashId — той самий флеш не додаємо двічі
+          if(role === 'anima-felt' && it.flash != null){
+            var feltExists = liveState.chat.some(function(m){ return m.role==='anima-felt' && m.flashId===it.flash; });
+            if(feltExists) return;
           }
 
           var metaStr = null;
@@ -1151,8 +1158,9 @@ function pollOnce(){
         renderChat(liveState.chat);
       }
       setLiveBadge(true);
+      _polling = false;
     })
-    .catch(function(){ setLiveBadge(false); });
+    .catch(function(){ setLiveBadge(false); _polling = false; });
 }
 
 function sendMessage(){
