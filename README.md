@@ -750,6 +750,8 @@ Conceptual and technical writing about the ideas behind Anima, ordered by reach:
 - [Discussion: Why a Prompt Can’t Give an AI Agent Initiative](https://dou.ua/forums/topic/60256/) — DOU
 - [Anima Community](https://anima-ai.discourse.group/) — Discourse
 
+- [personal-site](https://anima.2026-stell.workers.dev/)
+
 ---
 
 ## License
