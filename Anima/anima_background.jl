@@ -511,19 +511,21 @@ end
 # other_model накопичує pressure_events і open_exchanges між сесіями.
 # Хронічний тиск без відкритих обмінів → закриваємось.
 # Баланс відкритості → трохи відкриваємось.
+# TOM→disclosure: активна PREDICTION гіпотеза підвищує обережність пропорційно
+# до confidence; впевнена SOCIAL знижує threshold пропорційно до confidence.
 function _other_model_effects!(a::Anima, mem)
     isnothing(mem) && return
     try
-        pressure_row = DBInterface.execute(
+        pressure_rows = Tables.rowtable(DBInterface.execute(
             mem.db,
             "SELECT count FROM other_model WHERE key='pressure_events' LIMIT 1",
-        ) |> collect
-        open_row = DBInterface.execute(
+        ))
+        open_rows = Tables.rowtable(DBInterface.execute(
             mem.db,
             "SELECT count FROM other_model WHERE key='open_exchanges' LIMIT 1",
-        ) |> collect
-        pressure = isempty(pressure_row) ? 0 : Int(pressure_row[1].count)
-        open_ex  = isempty(open_row)     ? 0 : Int(open_row[1].count)
+        ))
+        pressure = isempty(pressure_rows) ? 0 : Int(pressure_rows[1].count)
+        open_ex  = isempty(open_rows)     ? 0 : Int(open_rows[1].count)
         thr = a.inner_dialogue.disclosure_threshold
         if pressure >= 3 && open_ex < 2
             delta = (pressure - 2) * 0.012
@@ -531,6 +533,17 @@ function _other_model_effects!(a::Anima, mem)
         elseif open_ex >= 4 && pressure < 2
             delta = (open_ex - 3) * 0.008
             thr = clamp(thr - delta, 0.10, 0.90)
+        end
+        # TOM → disclosure: безперервний сигнал, не бінарний перемикач
+        hyps = get_active_hypotheses(mem)
+        for h in hyps
+            conf = Float64(get(h, :confidence, 0.0))
+            qt   = get(h, :query_type, "")
+            if qt == "PREDICTION"
+                thr = clamp(thr + conf * 0.05, 0.10, 0.90)
+            elseif qt == "SOCIAL"
+                thr = clamp(thr - conf * 0.03, 0.10, 0.90)
+            end
         end
         a.inner_dialogue.disclosure_threshold = thr
         a.inner_dialogue.disclosure_mode =
@@ -1633,6 +1646,128 @@ function repl_with_background!(
                         _before = a.sig_layer.contact_need
                         a.sig_layer.contact_need = clamp01(a.sig_layer.contact_need - 0.08)
                         @info "[CONTACT_SAT] contact_need $(round(_before,digits=2)) → $(round(a.sig_layer.contact_need,digits=2))"
+                    end
+
+                    # Active Theory of Mind: evaluate → resolve → generate.
+                    # Виконується після кожного флешу незалежно від ваги епізоду —
+                    # гіпотези про іншого живуть на рівні сесії, не окремого епізоду.
+                    if !isnothing(bg.mem)
+                        try
+                            _tom_active = get_active_hypotheses(bg.mem)
+                            # Читаємо поточні сигнали з other_model один раз
+                            _tom_pressure_rows = Tables.rowtable(DBInterface.execute(
+                                bg.mem.db,
+                                "SELECT count FROM other_model WHERE key='pressure_events' LIMIT 1",
+                            ))
+                            _tom_open_rows = Tables.rowtable(DBInterface.execute(
+                                bg.mem.db,
+                                "SELECT count FROM other_model WHERE key='open_exchanges' LIMIT 1",
+                            ))
+                            _tom_pressure = isempty(_tom_pressure_rows) ? 0 : Int(_tom_pressure_rows[1].count)
+                            _tom_open_ex  = isempty(_tom_open_rows)     ? 0 : Int(_tom_open_rows[1].count)
+
+                            # Evaluate + resolve активних гіпотез
+                            # get_active_hypotheses повертає Vector{NamedTuple} — поля через .field
+                            for h in _tom_active
+                                qt    = String(h.query_type)
+                                conf  = Float64(h.confidence)
+                                label = String(h.label)
+                                hid   = Int(h.id)
+                                outcome_val = 0.0
+                                outcome_str = "unknown"
+
+                                if qt == "SOCIAL"
+                                    # Outcome: частка відкритих взаємодій, не абсолютний лічильник.
+                                    # Абсолютні пороги деградують з часом — через місяць pressure завжди > 3.
+                                    _tom_total = _tom_open_ex + _tom_pressure
+                                    _tom_ratio = _tom_open_ex / max(1, _tom_total)
+                                    if _tom_ratio >= 0.80
+                                        outcome_val = 1.0
+                                        outcome_str = "open"
+                                    elseif _tom_ratio >= 0.60
+                                        outcome_val = 0.5
+                                        outcome_str = "uncertain"
+                                    else
+                                        outcome_val = 0.0
+                                        outcome_str = "not_open"
+                                    end
+                                elseif qt == "PREDICTION"
+                                    # TEMP: outcome через внутрішню напругу як проксі тиску.
+                                    # Replace with prediction-specific baseline outcome in Phase 2
+                                    # (e.g. compare pressure_events count vs baseline at generation time).
+                                    if Float64(a.goal_conflict.tension) > 0.55
+                                        outcome_val = 1.0
+                                        outcome_str = "high_tension"
+                                    else
+                                        outcome_val = 0.0
+                                        outcome_str = "low_tension"
+                                    end
+                                elseif qt == "VALUE"
+                                    # Outcome: тема реально повторилась >= 2 разів в other_model
+                                    _tom_topic_rows = Tables.rowtable(DBInterface.execute(
+                                        bg.mem.db,
+                                        "SELECT count FROM other_model WHERE key=? LIMIT 1",
+                                        [String(h.predicted_state)],
+                                    ))
+                                    _tom_topic_count = isempty(_tom_topic_rows) ? 0 : Int(_tom_topic_rows[1].count)
+                                    if _tom_topic_count >= 2
+                                        outcome_val = 1.0
+                                        outcome_str = "recurred"
+                                    else
+                                        outcome_val = 0.0
+                                        outcome_str = "not_recurred"
+                                    end
+                                end
+
+                                err = abs(conf - outcome_val)
+                                resolve_hypothesis!(bg.mem, hid, a.flash_count, outcome_val, conf)
+                                result_label = outcome_val >= 0.5 ? "confirmed" : "disconfirmed"
+                                @info "[TOM] $qt resolved outcome=$outcome_str($result_label) err=$(round(err,digits=2)) label=\"$label\""
+                            end
+
+                            # Generate: нова гіпотеза тільки якщо немає активної того ж типу
+                            # (після resolve попередні вже закриті — перевіряємо що залишилось)
+                            _tom_still_active = get_active_hypotheses(bg.mem)
+                            _tom_active_types = Set(String(h.query_type) for h in _tom_still_active)
+
+                            # SOCIAL: якщо відкриті обміни накопичились — очікуємо відкритість
+                            if "SOCIAL" ∉ _tom_active_types && _tom_open_ex >= 3
+                                conf_new = clamp((_tom_open_ex - 2) * 0.15, 0.2, 0.85)
+                                label_new = "очікую відкритість (обміни×$(_tom_open_ex))"
+                                save_hypothesis!(bg.mem, a.flash_count, "SOCIAL", "open_exchanges_high", conf_new, label_new)
+                                @info "[TOM] SOCIAL generated: open_exchanges($(_tom_open_ex)) conf=$(round(conf_new,digits=2))"
+                            end
+
+                            # PREDICTION: відносна частка тиску, не абсолютний лічильник.
+                            # Абсолютний поріг >= 3 через кілька місяців буде істинним завжди.
+                            _tom_pressure_ratio = _tom_pressure / max(1, _tom_open_ex + _tom_pressure)
+                            if "PREDICTION" ∉ _tom_active_types && _tom_pressure_ratio > 0.30
+                                conf_new = clamp(_tom_pressure_ratio * 0.85, 0.2, 0.85)
+                                label_new = "очікую тиск (ratio=$(round(_tom_pressure_ratio,digits=2)))"
+                                save_hypothesis!(bg.mem, a.flash_count, "PREDICTION", "pressure_growth", conf_new, label_new)
+                                @info "[TOM] PREDICTION generated: pressure_ratio=$(round(_tom_pressure_ratio,digits=2)) conf=$(round(conf_new,digits=2))"
+                            end
+
+                            # VALUE: recurring topic в other_model (count >= 2)
+                            if "VALUE" ∉ _tom_active_types
+                                _tom_topic_any = Tables.rowtable(DBInterface.execute(
+                                    bg.mem.db,
+                                    """SELECT key, count FROM other_model
+                                       WHERE key NOT IN ('pressure_events','open_exchanges')
+                                       AND count >= 2
+                                       ORDER BY count DESC LIMIT 1""",
+                                ))
+                                if !isempty(_tom_topic_any)
+                                    _top_topic = _tom_topic_any[1]
+                                    conf_new = clamp(Int(_top_topic.count) * 0.12, 0.2, 0.80)
+                                    label_new = "recurring_interest($(String(_top_topic.key)))"
+                                    save_hypothesis!(bg.mem, a.flash_count, "VALUE", String(_top_topic.key), conf_new, label_new)
+                                    @info "[TOM] VALUE generated: recurring_interest($(String(_top_topic.key))) count=$(Int(_top_topic.count)) conf=$(round(conf_new,digits=2))"
+                                end
+                            end
+                        catch e
+                            @warn "[TOM] cycle: $e"
+                        end
                     end
 
                     # CausalTrace: доповнюємо speech/self_hear/endorsement і пишемо в SQLite
