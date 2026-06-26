@@ -1990,6 +1990,13 @@ function top_curiosity(cr::CuriosityRegistry)::Union{CuriosityObject,Nothing}
     active[argmax(map(o -> o.intensity, active))]
 end
 
+# всі активні об'єкти впорядковані за інтенсивністю (для :curiosity команди і TOM)
+function active_curiosities(cr::CuriosityRegistry)::Vector{CuriosityObject}
+    active = filter(o -> !o.resolved && o.intensity > 0.15, cr.objects)
+    sort!(active, by = o -> (-o.intensity, -o.last_active_flash, o.label))
+    active
+end
+
 # --- Curiosity Closure Signal (v1) ----------------------------------------
 # Петля Curiosity → Behavior → Endorsement → Progress → Curiosity Update.
 # progress_signal обчислюється в anima_background.jl (потребує endorsed,
