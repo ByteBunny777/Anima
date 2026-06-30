@@ -84,7 +84,10 @@ function write_gui_state!(a::Anima, r; audit = nothing, cf_co = nothing)
             "disclosure"     => isnothing(id) ? nothing : String(id.mode),
             "disclosure_thr" => isnothing(id) ? nothing : id.threshold,
             "shadow_p"       => isnothing(sh) ? nothing : sh.pressure,
-            "intent" => r.intent_label,
+            "intent"         => r.intent_label,
+            "contact_need"   => Float64(a.sig_layer.contact_need),
+            "identity_drift" => Float64(a.agency.identity_drift),
+            "chronic_low_serotonin" => Int(a.agency.chronic_low_serotonin),
         ),
         "causal" => causal,
     )
@@ -166,7 +169,10 @@ function gui_live_state(a)::Dict
             "disclosure"     => isnothing(id) ? nothing : string(id.mode),
             "disclosure_thr" => isnothing(id) ? nothing : id.threshold,
             "shadow_p"       => isnothing(sh) ? nothing : sh.pressure,
-            "intent" => string(a.last_intent),
+            "intent"         => string(a.last_intent),
+            "contact_need"   => Float64(a.sig_layer.contact_need),
+            "identity_drift" => Float64(a.agency.identity_drift),
+            "chronic_low_serotonin" => Int(a.agency.chronic_low_serotonin),
         ),
         "causal"   => Dict(
             "mal_dominant"        => string(mal.dominant),
