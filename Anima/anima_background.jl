@@ -607,6 +607,47 @@ function _chronic_cost_effects!(a::Anima)
     nothing
 end
 
+# Temporal Self-Perception Шар 1: тренд = середнє останнього вікна мінус
+# середнє попереднього вікна того самого розміру. Не нова таблиця — читання
+# causal_trace/audit_log, які й так пишуться щофлешу.
+function _update_temporal_trend!(a::Anima, mem)
+    ct_rows = Tables.rowtable(DBInterface.execute(
+        mem.db,
+        """SELECT nt_serotonin, nt_dopamine, nt_noradrenaline, identity_drift, endorsed
+           FROM causal_trace ORDER BY flash DESC LIMIT 40""",
+    ))
+    if length(ct_rows) < 10
+        @info "[TEMPORAL] замало даних для тренду ($(length(ct_rows)) рядків), пропуск"
+        return
+    end
+    reverse!(ct_rows)  # хронологічно: старі → нові
+    half = length(ct_rows) ÷ 2
+    older, recent = ct_rows[1:half], ct_rows[half+1:end]
+    avg(f, rows) = sum(f(r) for r in rows) / length(rows)
+
+    tt = a.agency.temporal_trend
+    tt.d_serotonin = avg(r -> Float64(r.nt_serotonin), recent) - avg(r -> Float64(r.nt_serotonin), older)
+    tt.d_dopamine = avg(r -> Float64(r.nt_dopamine), recent) - avg(r -> Float64(r.nt_dopamine), older)
+    tt.d_noradrenaline = avg(r -> Float64(r.nt_noradrenaline), recent) - avg(r -> Float64(r.nt_noradrenaline), older)
+    tt.d_identity_drift = avg(r -> Float64(r.identity_drift), recent) - avg(r -> Float64(r.identity_drift), older)
+    tt.endorsed_rate = count(r -> String(r.endorsed) == "endorsed", recent) / length(recent)
+
+    au_rows = Tables.rowtable(DBInterface.execute(
+        mem.db,
+        "SELECT audit_score FROM audit_log ORDER BY flash DESC LIMIT 40",
+    ))
+    if length(au_rows) >= 10
+        reverse!(au_rows)
+        ahalf = length(au_rows) ÷ 2
+        aolder, arecent = au_rows[1:ahalf], au_rows[ahalf+1:end]
+        tt.d_audit_score = avg(r -> Float64(r.audit_score), arecent) - avg(r -> Float64(r.audit_score), aolder)
+    end
+
+    tt.computed_at_flash = a.flash_count
+    @info "[TEMPORAL] тренд: dS=$(round(tt.d_serotonin,digits=3)) dD=$(round(tt.d_dopamine,digits=3)) dN=$(round(tt.d_noradrenaline,digits=3)) d_drift=$(round(tt.d_identity_drift,digits=3)) d_audit=$(round(tt.d_audit_score,digits=3)) endorsed_rate=$(round(tt.endorsed_rate,digits=2)) flash=$(a.flash_count)"
+    nothing
+end
+
 # --- Slow Tick (повний цикл ~60с) ------------------------------------------
 
 """
@@ -675,6 +716,15 @@ function slow_tick!(
             a.inner_dialogue.disclosure_threshold = clamp(thr, 0.10, 0.90)
         catch e
             @warn "[PHENO] apply_traits: $e"
+        end
+    end
+
+    # Temporal Self-Perception Шар 1 → тренд з causal_trace/audit_log (раз на 20 флешів)
+    if !isnothing(mem) && a.flash_count % 20 == 0 && a.flash_count > 0
+        try
+            _update_temporal_trend!(a, mem)
+        catch e
+            @warn "[TEMPORAL] trend update: $e"
         end
     end
 
