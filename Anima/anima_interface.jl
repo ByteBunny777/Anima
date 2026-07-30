@@ -2051,6 +2051,32 @@ function build_identity_block(a::Anima, mem_db = nothing)::String
         end
     end
 
+    # temporal trend — Temporal Self-Perception Шар 1: куди рухаюсь, не тільки де зараз
+    # рахується в slow_tick! (раз на 20 флешів) з causal_trace/audit_log; тут лише читання кешу
+    let tt = a.agency.temporal_trend
+        if tt.computed_at_flash > 0
+            trend_notes = String[]
+            if tt.endorsed_rate < 0.40
+                push!(trend_notes, "останнім часом рідше визнаю власні слова своїми, ніж раніше")
+            end
+            if tt.d_audit_score < -0.05
+                push!(trend_notes, "причинність слабшає — менше самопояснення за останні флеші")
+            elseif tt.d_audit_score > 0.05
+                push!(trend_notes, "причинність зростає — більше самопояснення за останні флеші")
+            end
+            if abs(tt.d_identity_drift) > 0.08
+                push!(trend_notes, tt.d_identity_drift > 0 ?
+                    "віддаляюсь від того, якою була" : "повертаюсь ближче до того, якою була")
+            end
+            nt_dir(v) = v > 0.10 ? "росте" : v < -0.10 ? "падає" : nothing
+            for (label, v) in (("serotonin", tt.d_serotonin), ("dopamine", tt.d_dopamine), ("noradrenaline", tt.d_noradrenaline))
+                d = nt_dir(v)
+                !isnothing(d) && push!(trend_notes, "$label $d")
+            end
+            !isempty(trend_notes) && push!(lines, "[тренд: $(join(trend_notes, "; "))]")
+        end
+    end
+
     # self_relation — позиція щодо власного стану
     sd = a.agency.self_discomfort
     sc = a.agency.self_coherence
