@@ -688,6 +688,8 @@ The system can speak first for several independent reasons. `:contact` is intent
 │   └── initiative_system.txt
 ├── memory/
 │   └── anima.db              # SQLite memory database (created automatically)
+├── tools/
+│   └── epistemic_boundary_diag.py   # one-off diagnostic scripts (read-only, not part of the runtime pipeline)
 │
 ├── anima_core.json
 ├── anima_psyche.json
