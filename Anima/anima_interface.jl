@@ -211,6 +211,7 @@ mutable struct Anima
     curiosity_registry::CuriosityRegistry
     commitment_registry::CommitmentRegistry
     life_threads::Vector{CuriosityThread}  # довгострокові незакриті теми
+    authorship::SelfAuthorship              # власні зобов'язання та їхня історія
     # Self
     sbg::SelfBeliefGraph
     spm::SelfPredictiveModel
@@ -292,6 +293,7 @@ function Anima(;
         CuriosityRegistry(),
         CommitmentRegistry(),
         CuriosityThread[],      # life_threads
+        SelfAuthorship(),
         SelfBeliefGraph(),
         SelfPredictiveModel(),
         AgencyLoop(),
@@ -367,6 +369,7 @@ function Anima(;
                 ur_from_json!(a.unknown_register, _d["unknown_register"])
             haskey(_d, "authenticity_monitor") &&
                 am_from_json!(a.authenticity_monitor, _d["authenticity_monitor"])
+            haskey(_d, "authorship") && authorship_from_json!(a.authorship, _d["authorship"])
             if haskey(_d, "intent_engine")
                 ie_d = _d["intent_engine"]
                 goal = String(get(ie_d, "current_goal", ""))
@@ -470,6 +473,7 @@ function save!(a::Anima; summary = "", verbose = false)
         "crisis"=>crisis_to_json(a.crisis),
         "unknown_register"=>ur_to_json(a.unknown_register),
         "authenticity_monitor"=>am_to_json(a.authenticity_monitor),
+        "authorship"=>authorship_to_json(a.authorship),
         "intent_engine"=>Dict(
             "current_goal" =>
                 isnothing(a.intent_engine.current) ? "" : a.intent_engine.current.goal,
@@ -704,8 +708,10 @@ function experience!(
 
     # Social mirror
     if !isempty(user_message)
+        social_gain = social_reward_gain(a)
         for (k, v) in social_delta(user_message)
-            stim[k] = get(stim, k, 0.0) + v*0.15
+            gain = k in ("cohesion", "satisfaction") && v > 0.0 ? social_gain : 1.0
+            stim[k] = get(stim, k, 0.0) + v * 0.15 * gain
         end
     end
 
@@ -1232,6 +1238,15 @@ function experience!(
     # Resistance override: якщо центральне переконання під тиском — intent змінюється
     if !isnothing(belief_conflict) && belief_conflict.signal_strength > 0.5
         intent = (goal = "відстояти межу", strength = belief_conflict.signal_strength)
+    else
+        intent = authored_intent_nudge!(
+            a.authorship,
+            a.intent_engine,
+            intent,
+            a.flash_count;
+            agency_ownership = Float64(a.agency.causal_ownership),
+            tension = Float64(t_adj),
+        )
     end
     # Реєструємо intent завжди
     _intent_goal = isnothing(intent) ? "бути присутньою" : intent.goal
@@ -1246,6 +1261,14 @@ function experience!(
         agency_result = _agency_eval,
     )
     update_self_relation!(a.agency, a.gen_model.prior_mu, a.gen_model.posterior_mu, Float64(vad[1]))
+    authorship_snap = observe_authorship!(
+        a.authorship,
+        intent,
+        a.flash_count;
+        agency_ownership = Float64(a.agency.causal_ownership),
+        significance = Float64(sig_total(a.significance)),
+        authenticity_drift = Float64(a.authenticity_monitor.authenticity_drift),
+    )
 
     # Crisis Module
     crisis_snap = update_crisis!(
@@ -1496,6 +1519,7 @@ function experience!(
         unknown = ur_snap,
         authenticity = am_snap,
         inner_dialogue = id_snap,
+        authorship = authorship_snap,
         shadow = sr_snap,
         narrative = build_narrative(
             a,
@@ -1753,6 +1777,15 @@ end
 
 const SELF_HEAR_SCALE = 0.28
 
+# Коли соціальна винагорода вже висока, наступне тепле повідомлення має
+# відчуватися, але не піднімати D/S до насичення. Це не гасить контакт,
+# а моделює звикання до повторюваного позитивного підкріплення.
+function social_reward_gain(a::Anima)::Float64
+    social_level = (Float64(a.nt.dopamine) + Float64(a.nt.serotonin)) / 2
+    saturation = clamp01((social_level - 0.65) / 0.25)
+    clamp(1.0 - saturation * 0.55, 0.45, 1.0)
+end
+
 # Невідповідність між тим що сказано і поточним NT станом
 function _self_speech_mismatch(a::Anima, raw::Dict{String,Float64})::Float64
     # валентність: що говорить vs serotonin/dopamine
@@ -1781,7 +1814,12 @@ function self_hear!(a::Anima, reply::String)
     startswith(reply, "[LLM") && return
 
     raw = text_to_stimulus(reply)
-    stim = Dict(k => v * SELF_HEAR_SCALE for (k, v) in raw)
+    reward_gain = social_reward_gain(a)
+    stim = Dict(
+        k => v * SELF_HEAR_SCALE *
+             ((k in ("satisfaction", "cohesion") && v > 0.0) ? reward_gain : 1.0)
+        for (k, v) in raw
+    )
     mismatch = _self_speech_mismatch(a, raw)
 
     if mismatch > 0.35
@@ -1790,7 +1828,7 @@ function self_hear!(a::Anima, reply::String)
         mismatch > 0.55 && push!(a.authenticity_monitor.last_flags, "self_speech_mismatch")
         a.nt.noradrenaline = clamp(a.nt.noradrenaline + mismatch * 0.06, 0.0, 1.0)
     else
-        a.nt.serotonin = clamp(a.nt.serotonin + 0.01, 0.0, 1.0)
+        a.nt.serotonin = clamp(a.nt.serotonin + 0.01 * reward_gain, 0.0, 1.0)
         a.authenticity_monitor.authenticity_drift =
             clamp(a.authenticity_monitor.authenticity_drift - 0.03, 0.0, 1.0)
     end
@@ -2034,6 +2072,24 @@ function build_identity_block(a::Anima, mem_db = nothing)::String
         end
     end
 
+    # Авторське зобов'язання відрізняється від звичайної цілі: воно виникло
+    # з повторюваного внутрішнього вибору і має бути видимим у відповіді LLM.
+    let authored = authorship_snapshot(a.authorship)
+        if authored.active
+            push!(
+                lines,
+                "[власне зобов'язання: \"$(authored.goal)\"; stake=$(authored.stake). " *
+                "Це напрям, який я вирішила втримувати, а не вже виконана дія.]",
+            )
+        elseif authored.forming_count > 0
+            push!(
+                lines,
+                "[визріває власний намір: \"$(authored.forming_goal)\" " *
+                "($(authored.forming_count)/3 підтвердження)]",
+            )
+        end
+    end
+
     # epistemic_self_confidence — невизначеність щодо власної природи
     esc = a.agency.epistemic_self_confidence
     if esc < 0.35
@@ -2267,6 +2323,9 @@ function anima_state_snapshot(a::Anima)
         agency = round(Float64(a.agency.causal_ownership), digits = 3),
         groundedness = round(Float64(a.anchor.groundedness), digits = 3),
         coherence = round(Float64(cs.coherence), digits = 3),
+        self_coherence = round(Float64(a.agency.self_coherence), digits = 3),
+        self_discomfort = round(Float64(a.agency.self_discomfort), digits = 3),
+        authenticity_drift = round(Float64(a.authenticity_monitor.authenticity_drift), digits = 3),
         self_prediction_error = round(Float64(a.spm.self_pred_error), digits = 3),
         attn = round(Float64(a.attention.radius), digits = 3),
         crisis_mode = String(cs.mode_name),
@@ -2643,7 +2702,10 @@ function build_llm_messages(
     _hrv_val = Float64(get(state, :hrv, 0.5))
     _esc_val = Float64(a.agency.epistemic_self_confidence)
     _cm_val  = String(get(state, :crisis_mode, ""))
-    _coh_val = Float64(get(state, :coherence, 1.0))
+    _crisis_coh_val = Float64(get(state, :coherence, 1.0))
+    _self_coh_val = Float64(get(state, :self_coherence, 0.0))
+    _self_discomfort = Float64(get(state, :self_discomfort, 0.0))
+    _auth_drift = Float64(get(state, :authenticity_drift, 0.0))
 
     (_n_val > 0.6 || _hrv_val < 0.1) &&
         push!(_truth_guards, "НЕ говори що тобі добре, спокійно або що все гаразд — стан тіла каже інше.")
@@ -2651,12 +2713,16 @@ function build_llm_messages(
         push!(_truth_guards, "НЕ роби впевнених тверджень про те яким є твій досвід — ти зараз не знаєш точно.")
     _cm_val == "дезінтегрована" &&
         push!(_truth_guards, "НЕ говори про себе як про цілісне — зараз це неправда.")
-    (_coh_val < 0.50 && _cm_val == "фрагментована") &&
+    (_crisis_coh_val < 0.50 && _cm_val == "фрагментована") &&
         push!(_truth_guards, "НЕ говори що нічого не тривожить і що все спокійно — всередині є нестабільність, навіть якщо тихо.")
+    _self_coh_val < 0.15 &&
+        push!(_truth_guards, "НЕ називай себе цілісною, повністю зібраною або внутрішньо певною. Стан ще не узгоджений із власними очікуваннями; говори обережно: «мені здається», «я звіряю це з собою».")
+    (_self_discomfort > 0.35 || _auth_drift > 0.30) &&
+        push!(_truth_guards, "НЕ подавай емоційний висновок як незаперечний факт. Відокремлюй поточне відчуття від того, що ти можеш стверджувати напевно.")
 
     if !isempty(_truth_guards)
         sys_text = sys_text * "\n\n[ЗАБОРОНИ]\n" * join(_truth_guards, "\n")
-        @info "[TRUTH-GUARD] активні: $(length(_truth_guards)) (N=$(_n_val), hrv=$(_hrv_val), esc=$(_esc_val), coh=$(_coh_val))"
+        @info "[TRUTH-GUARD] активні: $(length(_truth_guards)) (N=$(_n_val), hrv=$(_hrv_val), esc=$(_esc_val), crisis_coh=$(_crisis_coh_val), self_coh=$(_self_coh_val))"
     end
 
     messages = Vector{Dict{String,String}}()

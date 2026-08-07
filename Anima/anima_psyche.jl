@@ -838,8 +838,13 @@ function assess_significance!(
 
     contact_signal = cohesion < 0.35 && tension < 0.5
     contact_signal && (sl.contact_need = clamp01(sl.contact_need + (0.35 - cohesion) * 0.2))
-    get(stim, "cohesion", 0.0) > 0.1 &&
-        (sl.contact_need = clamp01(sl.contact_need + get(stim, "cohesion", 0.0) * 0.1))
+    # Теплий контакт не має підживлювати голод до контакту нескінченно.
+    # Він дає часткове насичення, сильніше коли потреба вже висока.
+    cohesion_stim = get(stim, "cohesion", 0.0)
+    if cohesion_stim > 0.1
+        satiation = cohesion_stim * (0.06 + 0.12 * sl.contact_need)
+        sl.contact_need = clamp01(sl.contact_need - satiation)
+    end
 
     truth_signal = pred_error > 0.3 && phi > 0.2
     truth_signal && (sl.truth_need = clamp01(sl.truth_need + pred_error * 0.1 + phi * 0.05))
@@ -2545,6 +2550,260 @@ function cmt_from_json!(cmt::CommitmentRegistry, d::AbstractDict)
             Bool(od["fulfilled"]),
         ))
     end
+end
+
+# --- Self-authorship -------------------------------------------------------
+# Намір стає "моїм" не в момент появи, а після кількох узгоджених повторень.
+# Цей шар не створює зовнішніх дій сам по собі: він зберігає їхній сенс,
+# ціну відмови та помірно захищає вибір від випадкової зміни настрою.
+
+mutable struct AuthoredCommitment
+    goal::String
+    reason::String
+    created_flash::Int
+    last_active_flash::Int
+    endorsements::Int
+    follow_through::Int
+    deviations::Int
+    stake::Float64
+    status::Symbol
+end
+
+mutable struct SelfAuthorship
+    commitments::Vector{AuthoredCommitment}
+    candidate_goal::String
+    candidate_count::Int
+    candidate_first_flash::Int
+    last_reflection_flash::Int
+    authored_revisions::Int
+    max_commitments::Int
+end
+
+SelfAuthorship() = SelfAuthorship(
+    AuthoredCommitment[], "", 0, 0, 0, 0, 4,
+)
+
+function _active_authored_commitment(sa::SelfAuthorship)
+    active = filter(c -> c.status == :active && c.stake >= 0.20, sa.commitments)
+    isempty(active) && return nothing
+    sort(active, by = c -> c.stake, rev = true)[1]
+end
+
+function _prune_authored_commitments!(sa::SelfAuthorship)
+    filter!(c -> c.status != :released || c.stake >= 0.05, sa.commitments)
+    while length(sa.commitments) >= sa.max_commitments
+        idx = argmin(map(c -> c.stake, sa.commitments))
+        deleteat!(sa.commitments, idx)
+    end
+end
+
+"""
+    authored_intent_nudge!(sa, ie, intent, flash; agency_ownership, tension)
+
+Власне зобов'язання може повернутися як наступний намір, але лише за
+достатньої agency і без гострої напруги. Тому воно не перетворюється на
+жорсткий сценарій і не скасовує реакцію на небезпеку.
+"""
+function authored_intent_nudge!(
+    sa::SelfAuthorship,
+    ie::IntentEngine,
+    intent::Union{Intent,Nothing},
+    flash::Int;
+    agency_ownership::Float64,
+    tension::Float64,
+)
+    active = _active_authored_commitment(sa)
+    isnothing(active) && return intent
+    agency_ownership < 0.42 && return intent
+    tension > 0.68 && return intent
+
+    same_goal = !isnothing(intent) && intent.goal == active.goal
+    if !same_goal && active.stake >= 0.45 && flash - active.last_active_flash <= 80
+        chosen = Intent(
+            active.goal,
+            clamp(0.42 + active.stake * 0.35, 0.0, 0.82),
+            "self_authored",
+            0.96,
+        )
+        ie.current = chosen
+        active.last_active_flash = flash
+        return chosen
+    end
+    intent
+end
+
+"""
+    observe_authorship!(sa, intent, flash; agency_ownership, significance, authenticity_drift)
+
+Перетворює повторюваний, достатньо власний намір на зобов'язання з
+історією дотримання. Низька agency або високий ризик неавтентичності не
+створюють нового зобов'язання.
+"""
+function observe_authorship!(
+    sa::SelfAuthorship,
+    intent::Union{Intent,Nothing},
+    flash::Int;
+    agency_ownership::Float64,
+    significance::Float64,
+    authenticity_drift::Float64,
+)
+    for c in sa.commitments
+        c.status == :active || continue
+        if !isnothing(intent) && intent.goal == c.goal
+            c.follow_through += 1
+            c.endorsements += intent.origin == "self_authored" ? 1 : 0
+            c.stake = clamp01(c.stake + 0.035)
+            c.last_active_flash = flash
+        elseif flash - c.last_active_flash >= 3
+            c.deviations += 1
+            c.stake = clamp01(c.stake - 0.06)
+            c.last_active_flash = flash
+            c.deviations >= 4 && c.stake < 0.20 && (c.status = :released)
+        end
+    end
+
+    qualifies = !isnothing(intent) &&
+        agency_ownership >= 0.44 && significance >= 0.28 && authenticity_drift < 0.55
+    if !qualifies
+        sa.candidate_count = max(0, sa.candidate_count - 1)
+        sa.candidate_count == 0 && (sa.candidate_goal = "")
+        return authorship_snapshot(sa)
+    end
+
+    goal = intent.goal
+    already_authored = any(c -> c.status == :active && c.goal == goal, sa.commitments)
+    if already_authored
+        sa.candidate_goal = ""
+        sa.candidate_count = 0
+        return authorship_snapshot(sa)
+    end
+
+    if sa.candidate_goal == goal
+        sa.candidate_count += 1
+    else
+        sa.candidate_goal = goal
+        sa.candidate_count = 1
+        sa.candidate_first_flash = flash
+    end
+
+    if sa.candidate_count >= 3
+        _prune_authored_commitments!(sa)
+        reason = "намір повторився $(sa.candidate_count) рази за достатньої agency=$(round(agency_ownership, digits=2))"
+        push!(sa.commitments, AuthoredCommitment(
+            goal,
+            reason,
+            sa.candidate_first_flash,
+            flash,
+            1,
+            1,
+            0,
+            clamp(0.38 + significance * 0.22 + agency_ownership * 0.12, 0.0, 0.78),
+            :active,
+        ))
+        @info "[AUTHORSHIP] Власне зобов'язання: \"$goal\""
+        sa.candidate_goal = ""
+        sa.candidate_count = 0
+    end
+    authorship_snapshot(sa)
+end
+
+function authorship_slow_tick!(sa::SelfAuthorship, flash::Int)
+    for c in sa.commitments
+        c.status == :active || continue
+        idle = flash - c.last_active_flash
+        idle > 120 && (c.stake = clamp01(c.stake - 0.008))
+        c.stake < 0.08 && (c.status = :released)
+    end
+    nothing
+end
+
+function reflect_authorship!(
+    sa::SelfAuthorship,
+    values::ValueSystem,
+    flash::Int;
+    agency_ownership::Float64,
+    authenticity_drift::Float64,
+)
+    flash - sa.last_reflection_flash < 60 && return nothing
+    sa.last_reflection_flash = flash
+    agency_ownership < 0.45 && return nothing
+    authenticity_drift >= 0.55 && return nothing
+
+    active = filter(c -> c.status == :active, sa.commitments)
+    observations = sum(c.follow_through + c.deviations for c in active)
+    observations < 6 && return nothing
+
+    kept = sum(c.follow_through for c in active)
+    departed = sum(c.deviations for c in active)
+    delta = clamp((kept - departed) / observations * 0.025, -0.025, 0.025)
+    abs(delta) < 0.005 && return nothing
+
+    # Обмежений перегляд: досвід може лише трохи зсунути вагу автономії
+    # та цілісності, але не переписати засадничі цінності за один цикл.
+    values.autonomy = clamp(values.autonomy + delta, 0.45, 0.90)
+    values.integrity = clamp(values.integrity + delta * 0.5, 0.50, 0.95)
+    sa.authored_revisions += 1
+    @info "[AUTHORSHIP] Рефлексія цінностей: Δ=$(round(delta, digits=3))"
+    nothing
+end
+
+function authorship_snapshot(sa::SelfAuthorship)
+    active = _active_authored_commitment(sa)
+    (
+        active = !isnothing(active),
+        goal = isnothing(active) ? "" : active.goal,
+        stake = isnothing(active) ? 0.0 : round(active.stake, digits = 3),
+        commitments = count(c -> c.status == :active, sa.commitments),
+        forming_goal = sa.candidate_goal,
+        forming_count = sa.candidate_count,
+        revisions = sa.authored_revisions,
+    )
+end
+
+function authorship_to_json(sa::SelfAuthorship)
+    Dict(
+        "commitments" => [
+            Dict(
+                "goal" => c.goal,
+                "reason" => c.reason,
+                "created_flash" => c.created_flash,
+                "last_active_flash" => c.last_active_flash,
+                "endorsements" => c.endorsements,
+                "follow_through" => c.follow_through,
+                "deviations" => c.deviations,
+                "stake" => c.stake,
+                "status" => String(c.status),
+            ) for c in sa.commitments
+        ],
+        "candidate_goal" => sa.candidate_goal,
+        "candidate_count" => sa.candidate_count,
+        "candidate_first_flash" => sa.candidate_first_flash,
+        "last_reflection_flash" => sa.last_reflection_flash,
+        "authored_revisions" => sa.authored_revisions,
+    )
+end
+
+function authorship_from_json!(sa::SelfAuthorship, d::AbstractDict)
+    empty!(sa.commitments)
+    for od in get(d, "commitments", Any[])
+        push!(sa.commitments, AuthoredCommitment(
+            String(get(od, "goal", "")),
+            String(get(od, "reason", "")),
+            Int(get(od, "created_flash", 0)),
+            Int(get(od, "last_active_flash", 0)),
+            Int(get(od, "endorsements", 0)),
+            Int(get(od, "follow_through", 0)),
+            Int(get(od, "deviations", 0)),
+            clamp01(Float64(get(od, "stake", 0.0))),
+            Symbol(get(od, "status", "released")),
+        ))
+    end
+    sa.candidate_goal = String(get(d, "candidate_goal", ""))
+    sa.candidate_count = Int(get(d, "candidate_count", 0))
+    sa.candidate_first_flash = Int(get(d, "candidate_first_flash", 0))
+    sa.last_reflection_flash = Int(get(d, "last_reflection_flash", 0))
+    sa.authored_revisions = Int(get(d, "authored_revisions", 0))
+    nothing
 end
 
 # --- AttentionFocus -------------------------------------------------------

@@ -88,6 +88,8 @@ function write_gui_state!(a::Anima, r; audit = nothing, cf_co = nothing)
             "disclosure_thr" => isnothing(id) ? nothing : id.threshold,
             "shadow_p"       => isnothing(sh) ? nothing : sh.pressure,
             "intent"         => r.intent_label,
+            "authored_goal"  => r.authorship.goal,
+            "authored_stake" => r.authorship.stake,
             "contact_need"   => Float64(a.sig_layer.contact_need),
             "identity_drift" => Float64(a.agency.identity_drift),
             "chronic_low_serotonin" => Int(a.agency.chronic_low_serotonin),

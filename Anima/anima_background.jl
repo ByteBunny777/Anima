@@ -802,6 +802,14 @@ function slow_tick!(
 
     # Psyche drift
     psyche_slow_tick!(a)
+    authorship_slow_tick!(a.authorship, a.flash_count)
+    reflect_authorship!(
+        a.authorship,
+        a.values,
+        a.flash_count;
+        agency_ownership = Float64(a.agency.causal_ownership),
+        authenticity_drift = Float64(a.authenticity_monitor.authenticity_drift),
+    )
 
     # Dream generation
     if !isnothing(mem)
@@ -1106,6 +1114,14 @@ function background_save!(a::Anima)
         "crisis" => crisis_to_json(a.crisis),
         "unknown_register" => ur_to_json(a.unknown_register),
         "authenticity_monitor" => am_to_json(a.authenticity_monitor),
+        "authorship" => authorship_to_json(a.authorship),
+        "intent_engine" => Dict(
+            "current_goal" => isnothing(a.intent_engine.current) ? "" : a.intent_engine.current.goal,
+            "current_strength" => isnothing(a.intent_engine.current) ? 0.0 : a.intent_engine.current.strength,
+            "current_origin" => isnothing(a.intent_engine.current) ? "" : a.intent_engine.current.origin,
+            "history" => collect(a.intent_engine.history),
+            "drive_history" => collect(a.intent_engine.drive_history),
+        ),
     )
     atomic_write(self_path, self_data)
 
@@ -1139,8 +1155,10 @@ function background_save!(a::Anima)
         "shadow_registry" => sr_to_json(a.shadow_registry),
         "inner_dialogue" => id_to_json(a.inner_dialogue),
         "curiosity_registry" => cr_to_json(a.curiosity_registry),
+        "commitment_registry" => cmt_to_json(a.commitment_registry),
         "aesthetic_sense" => as_to_json(a.aesthetic_sense),
         "attention_focus" => af_to_json(a.attention_focus),
+        "life_threads" => threads_to_json(a.life_threads),
     )
     atomic_write(a.psyche_mem_path, psyche_data)
 end
