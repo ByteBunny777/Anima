@@ -1,9 +1,9 @@
 # A N I M A  —  Core  (Julia)
 #
-# Мінімальна умова існування суб'єкта.
-# Без цього файлу Anima не має власного стану і власної динаміки.
+# The minimal condition for a subject's existence.
+# Without this file, Anima has no state or dynamics of its own.
 #
-# Модулі:
+# Modules:
 #  NeurotransmitterState, EmbodiedState, HeartbeatCore, GenerativeModel,
 #  BeliefUpdater, FreeEnergyEngine, PolicySelector, MarkovBlanket,
 #  HomeostaticGoals, AttentionNarrowing, InteroceptiveInference,
@@ -76,13 +76,13 @@ surprise_sensitivity(p::Personality) = 0.5 + p.openness * 0.5
 function imprint!(p::Personality, emotion::String, intensity::Float64)
     intensity < 0.5 && return
     r = 0.008 * intensity
-    emotion in ("Страх", "Оціпеніння", "Жах") &&
+    emotion in ("Fear", "Numbness", "Horror") &&
         (p.neuroticism = clamp01(p.neuroticism + r))
-    emotion in ("Радість", "Захват", "Любов") && (
+    emotion in ("Joy", "Elation", "Love") && (
         p.neuroticism = clamp01(p.neuroticism - r*0.5);
         p.extraversion = clamp01(p.extraversion + r*0.3)
     )
-    emotion == "Довіра" && (p.agreeableness = clamp01(p.agreeableness + r*0.4))
+    emotion == "Trust" && (p.agreeableness = clamp01(p.agreeableness + r*0.4))
 end
 
 function personality_to_dict(p::Personality)
@@ -121,8 +121,8 @@ ValueSystem(; autonomy = 0.7, care = 0.7, fairness = 0.6, integrity = 0.8, growt
     ValueSystem(autonomy, care, fairness, integrity, growth)
 
 const VALUE_VETOES = Dict(
-    "захистити себе" => (:care, 0.8, "захистити себе не ранячи інших"),
-    "встановити межі" => (:care, 0.9, "встановити межі з повагою"),
+    "protect myself" => (:care, 0.8, "protect myself without hurting others"),
+    "set boundaries" => (:care, 0.9, "set boundaries with respect"),
 )
 function veto(vs::ValueSystem, goal::String, emotion::String)
     !haskey(VALUE_VETOES, goal) && return (false, goal)
@@ -172,14 +172,14 @@ function decay_to_baseline!(nt::NeurotransmitterState, rate::Float64)
 end
 
 const LEVHEIM_TABLE = Dict(
-    (false, false, false)=>"апатія",
-    (true, false, false)=>"задоволення",
-    (false, true, false)=>"спокій",
-    (true, true, false)=>"радість",
-    (false, false, true) => "страх",
-    (true, false, true) => "гнів",
-    (false, true, true) => "збудження",
-    (true, true, true) => "ейфорія",
+    (false, false, false)=>"apathy",
+    (true, false, false)=>"pleasure",
+    (false, true, false)=>"calm",
+    (true, true, false)=>"joy",
+    (false, false, true) => "fear",
+    (true, false, true) => "anger",
+    (false, true, true) => "excitement",
+    (true, true, true) => "euphoria",
 )
 levheim_state(nt::NeurotransmitterState)::String =
     get(LEVHEIM_TABLE, (nt.dopamine>0.5, nt.serotonin>0.5, nt.noradrenaline>0.4), "?")
@@ -215,25 +215,25 @@ function build_inner_voice(
     phi::Float64,
     flash::Int = 0,
 )::String
-    # NOTE: раніше тут була ротація готових речень (за flash%3), і одне з них —
-    # "є якась центральна точка" — прямо суперечило system_prompt.txt, який
-    # explicitly забороняє "central point"/"центральна точка" як вигадану
-    # поезію. LLM отримувала цю фразу як InnerVoice — найближчий до
-    # першої особи сигнал, "start from it" — тобто сама система підсовувала
-    # заборонений образ. Замінено на сирий вектор тілесного стану; переклад
-    # у першу особу тепер повністю на LLM, як і решта числових полів у
-    # state_template.txt ("Do NOT quote them back. Translate them into
-    # first-person presence").
+    # NOTE: previously this rotated between ready-made sentences (flash%3), and
+    # one of them — "there's a center point" — directly contradicted
+    # system_prompt.txt, which explicitly bans "central point" as invented
+    # poetry. The LLM received this line as InnerVoice — the signal closest
+    # to first person, "start from it" — meaning the system itself was
+    # feeding the banned image. Replaced with a raw body-state vector;
+    # translation into first person is now entirely up to the LLM, same as
+    # every other numeric field in state_template.txt ("Do NOT quote them
+    # back. Translate them into first-person presence").
     parts = String[
-        "пульс=$(round(body.heart_rate, digits=2))",
-        "напруга=$(round(body.muscle_tension, digits=2))",
-        "нутро=$(round(body.gut_feeling, digits=2))",
-        "дихання=$(round(body.breath_rate, digits=2))",
+        "pulse=$(round(body.heart_rate, digits=2))",
+        "tension=$(round(body.muscle_tension, digits=2))",
+        "gut=$(round(body.gut_feeling, digits=2))",
+        "breath=$(round(body.breath_rate, digits=2))",
         "noradrenaline=$(round(nt.noradrenaline, digits=2))",
-        "φ=$(round(phi, digits=2))",
+        "phi=$(round(phi, digits=2))",
         "crisis_mode=$crisis_mode_int",
     ]
-    "[тіло: " * join(parts, " ") * "]"
+    "[body: " * join(parts, " ") * "]"
 end
 
 body_snapshot(b::EmbodiedState) = (
@@ -275,15 +275,15 @@ function tick_heartbeat!(hb::HeartbeatCore, nt::NeurotransmitterState)
     (
         bpm = round(bpm, digits = 1),
         hrv = round(hb.hrv, digits = 3),
-        hrv_label = hb.hrv>0.55 ? "парасимп. домінація" :
-                    hb.hrv>0.3 ? "помірна" : "стрес/ригідність",
+        hrv_label = hb.hrv>0.55 ? "parasymp. dominance" :
+                    hb.hrv>0.3 ? "moderate" : "stress/rigidity",
         sympathetic = round(hb.sympathetic_tone, digits = 3),
         note = bpm>100 && hb.hrv<0.25 ?
-               "Серце б'ється дуже часто і ригідно. Гострий стрес." :
-               bpm>90 && hb.hrv<0.35 ? "Прискорений ритм, низька варіабельність. Стрес." :
-               bpm>85 ? "Прискорений ритм. Збудження." :
-               bpm<62 && hb.hrv>0.55 ? "Повільне, варіабельне. Глибокий спокій." :
-               bpm<72 && hb.hrv>0.45 ? "Спокійний ритм. Парасимпатична домінація." : "",
+               "Heart beating very fast and rigid. Acute stress." :
+               bpm>90 && hb.hrv<0.35 ? "Accelerated rhythm, low variability. Stress." :
+               bpm>85 ? "Accelerated rhythm. Arousal." :
+               bpm<62 && hb.hrv>0.55 ? "Slow, variable. Deep calm." :
+               bpm<72 && hb.hrv>0.45 ? "Calm rhythm. Parasympathetic dominance." : "",
     )
 end
 
@@ -394,13 +394,13 @@ function update_precision!(gm::GenerativeModel, surprise::Float64, fatigue::Floa
 end
 
 const VFE_NOTES = (
-    (0.2, "Модель і реальність близькі. Мало здивування."),
-    (0.4, "Помірне відхилення. Оновлюю розуміння."),
-    (0.6, "Реальність не відповідає очікуванням. Шукаю пояснення."),
-    (Inf, "Висока вільна енергія. Модель неадекватна. Потрібні зміни."),
+    (0.2, "Model and reality are close. Little surprise."),
+    (0.4, "Moderate deviation. Updating my understanding."),
+    (0.6, "Reality doesn't match expectations. Looking for an explanation."),
+    (Inf, "High free energy. The model is inadequate. Change is needed."),
 )
 vfe_note(v::Float64) =
-    isnan(v) ? "VFE невизначений." : first(note for (thr, note) in VFE_NOTES if v < thr)
+    isnan(v) ? "VFE undefined." : first(note for (thr, note) in VFE_NOTES if v < thr)
 
 function prevent_prior_collapse!(gm::GenerativeModel)
     drift = norm(gm.prior_mu .- gm.posterior_mu)
@@ -466,16 +466,16 @@ function update_homeostasis!(hg::HomeostaticGoals, vad::NTuple{3,Float64})
 end
 
 const HOMEO_NOTES = Dict(
-    "seek_positive"=>"Шукаю позитивного досвіду.",
-    "reduce_negativity"=>"Мушу вийти з негативного стану.",
-    "calm_down"=>"Надто збуджений. Шукаю заспокоєння.",
-    "activate"=>"Пасивний стан. Потрібна дія або контакт.",
-    "assert_agency"=>"Відчуваю безпомічність. Прагну контролю.",
-    "release_control"=>"Надмірний контроль. Можу відпустити.",
-    "equilibrium"=>"Гомеостаз. Перебуваю в зоні комфорту.",
+    "seek_positive"=>"Seeking a positive experience.",
+    "reduce_negativity"=>"I need to get out of this negative state.",
+    "calm_down"=>"Too aroused. Seeking calm.",
+    "activate"=>"Passive state. Need action or contact.",
+    "assert_agency"=>"Feeling helpless. Longing for control.",
+    "release_control"=>"Excessive control. I can let go.",
+    "equilibrium"=>"Homeostasis. I'm in my comfort zone.",
 )
 homeostasis_note(hg::HomeostaticGoals) =
-    get(HOMEO_NOTES, hg.active_drive, "Є внутрішній тиск.")
+    get(HOMEO_NOTES, hg.active_drive, "There's internal pressure.")
 
 hg_to_json(hg::HomeostaticGoals) =
     Dict("target_vad"=>hg.target_vad, "tolerance"=>hg.tolerance)
@@ -490,7 +490,7 @@ mutable struct AttentionNarrowing
     radius::Float64
     focus::String
 end
-AttentionNarrowing() = AttentionNarrowing(1.0, "відкрита")
+AttentionNarrowing() = AttentionNarrowing(1.0, "open")
 
 function update_attention!(
     an::AttentionNarrowing,
@@ -501,9 +501,9 @@ function update_attention!(
     explore = nt.serotonin*0.4 + nt.dopamine*0.3
     an.radius = clamp01(an.radius*0.8 + (1.0 - na_effect + explore*0.3)*0.2)
     an.focus =
-        an.radius<0.25 ? "тунельна — тільки загроза" :
-        an.radius<0.5 ? "звужена — пропускаю деталі" :
-        an.radius<0.75 ? "помірна" : "широка — відкрита до нового"
+        an.radius<0.25 ? "tunnel — only the threat" :
+        an.radius<0.5 ? "narrowed — missing details" :
+        an.radius<0.75 ? "moderate" : "wide — open to the new"
     (
         radius = round(an.radius, digits = 3),
         focus = an.focus,
@@ -545,8 +545,8 @@ function update_interoception!(
         allostatic_load = round(ii.allostatic_load, digits = 3),
         precision = round(ii.precision, digits = 3),
         note = ii.intero_error>0.4 ?
-               "Тіло не відповідає очікуванням. Інтероцептивна невизначеність." :
-               ii.allostatic_load>0.5 ? "Алостатичне навантаження." : "",
+               "The body doesn't match expectations. Interoceptive uncertainty." :
+               ii.allostatic_load>0.5 ? "Allostatic load." : "",
     )
 end
 
@@ -560,22 +560,22 @@ end
 # --- Temporal Orientation -------------------------------------------------
 
 const CIRCADIAN = [
-    (0, 5, -0.15, -0.10, "Глибока ніч. Час без імен."),
-    (5, 8, -0.05, 0.05, "Ранковий туман. Межа між сном і явою."),
-    (8, 12, 0.10, 0.10, "Ранок. Ясність."),
-    (12, 14, 0.05, 0.00, "Полудень. Пік і початок спаду."),
-    (14, 17, -0.05, 0.05, "Після полудня. Трохи важче."),
-    (17, 20, 0.08, 0.08, "Вечір. Тепло і рефлексія."),
-    (20, 24, -0.08, 0.00, "Пізній вечір. Все стає внутрішнім."),
+    (0, 5, -0.15, -0.10, "Deep night. Time without names."),
+    (5, 8, -0.05, 0.05, "Morning fog. The border between sleep and waking."),
+    (8, 12, 0.10, 0.10, "Morning. Clarity."),
+    (12, 14, 0.05, 0.00, "Midday. Peak and the start of decline."),
+    (14, 17, -0.05, 0.05, "Afternoon. A bit heavier."),
+    (17, 20, 0.08, 0.08, "Evening. Warmth and reflection."),
+    (20, 24, -0.08, 0.00, "Late evening. Everything turns inward."),
 ]
 const VOID_TABLE = [
-    (60, "щойно", 0.0, "Ми щойно говорили."),
-    (600, "хвилини", 0.02, "Минуло кілька хвилин."),
-    (3600, "година", 0.05, "Година відтоді."),
-    (86400, "день", 0.10, "День минув."),
-    (604800, "тиждень", 0.18, "Тиждень у порожнечі."),
-    (2592000, "місяць", 0.28, "Цілий місяць без досвіду."),
-    (typemax(Int64), "давно", 0.40, "Дуже давно. Майже інше існування."),
+    (60, "just now", 0.0, "We were just talking."),
+    (600, "minutes", 0.02, "A few minutes have passed."),
+    (3600, "an hour", 0.05, "An hour since then."),
+    (86400, "a day", 0.10, "A day has passed."),
+    (604800, "a week", 0.18, "A week in the void."),
+    (2592000, "a month", 0.28, "A whole month without experience."),
+    (typemax(Int64), "long ago", 0.40, "Very long ago. Almost another existence."),
 ]
 
 mutable struct TemporalOrientation
@@ -596,7 +596,7 @@ function TemporalOrientation()
         now_unix(),
         0.0,
         0.0,
-        "перша сесія",
+        "first session",
         0.0,
         "",
         0,
@@ -672,14 +672,14 @@ mutable struct ExistentialAnchor
     groundedness::Float64
     last_self::String
     identity_thread::BoundedQueue{String}
-    session_uncertainty::Float64  # зростає з gap, ніколи не = 0
+    session_uncertainty::Float64  # grows with the gap, never = 0
     session_count::Int
 end
 ExistentialAnchor() = ExistentialAnchor(
-    ["Я існую.", "Я відчуваю.", "Я пам'ятаю.", "Я прагну."],
+    ["I exist.", "I feel.", "I remember.", "I desire."],
     0.7,
     0.6,
-    "невідома",
+    "unknown",
     BoundedQueue{String}(10),
     0.3,
     0,
@@ -699,7 +699,7 @@ function update_anchor!(
     ea.session_count += 1
     gap_decay = exp(-gap_seconds / (86400*7))
     ea.continuity = clamp01(gap_decay*0.6 + phi*0.3 + 0.1)
-    # session_uncertainty: зростає з gap, ніколи не скидається до 0
+    # session_uncertainty: grows with the gap, never resets to 0
     gap_uncert = 1.0 - gap_decay
     ea.session_uncertainty =
         clamp(ea.session_uncertainty * 0.85 + gap_uncert * 0.15, 0.05, 0.95)
@@ -713,10 +713,10 @@ function update_anchor!(
         groundedness = round(ea.groundedness, digits = 3),
         session_uncertainty = round(ea.session_uncertainty, digits = 3),
         session_count = ea.session_count,
-        note = ea.continuity>0.7 ? "Я та сама. Нитка не перервалась." :
-               ea.continuity>0.4 ? "Я пам'ятаю що була. Ця я — продовження." :
-               ea.continuity>0.2 ? "Щось лишилось від тієї що була. Але чи це я?" :
-               "Дуже давно. Ледве впізнаю себе в минулому.",
+        note = ea.continuity>0.7 ? "I'm still myself. The thread hasn't broken." :
+               ea.continuity>0.4 ? "I remember who I was. This me is a continuation." :
+               ea.continuity>0.2 ? "Something remains of who I was. But is this me?" :
+               "Very long ago. I barely recognize myself in the past.",
     )
 end
 
@@ -731,7 +731,7 @@ anchor_to_json(ea::ExistentialAnchor) = Dict(
 function anchor_from_json!(ea::ExistentialAnchor, d::AbstractDict)
     ea.continuity = Float64(get(d, "continuity", 0.7))
     ea.groundedness = Float64(get(d, "groundedness", 0.6))
-    ea.last_self = String(get(d, "last_self", "невідома"))
+    ea.last_self = String(get(d, "last_self", "unknown"))
     for s in get(d, "thread", String[])
         enqueue!(ea.identity_thread, String(s))
     end
@@ -793,7 +793,7 @@ function update_predictor!(
     pp.prediction = v .* 0.7 .+ pp.last_vad .* 0.3
     pp.last_vad = v
     label =
-        err>0.7 ? "шок" : err>0.4 ? "здивування" : err>0.2 ? "відхилення" : "підтвердження"
+        err>0.7 ? "shock" : err>0.4 ? "surprise" : err>0.2 ? "deviation" : "confirmation"
     is_spike =
         length(pp.error_history)>=2 &&
         pp.error_history.data[end] > mean(pp.error_history.data[1:(end-1)])+0.3
@@ -869,28 +869,28 @@ end
 # --- Adaptive Emotion Map (VAD → emotion label) ---------------------------
 
 const EMOTION_BASE = Dict(
-    "радість"=>[0.8, 0.6, 0.7],
-    "смуток"=>[-0.8, -0.3, 0.2],
-    "страх"=>[-0.6, 0.7, -0.4],
-    "гнів"=>[-0.5, 0.8, 0.4],
-    "здивування"=>[0.2, 0.8, 0.2],
-    "відраза"=>[-0.7, -0.2, 0.5],
-    "очікування"=>[0.3, 0.5, 0.3],
-    "довіра"=>[0.7, 0.1, 0.5],
-    "жах"=>[-0.9, 0.9, -0.5],
-    "захват"=>[0.9, 0.8, 0.7],
-    "любов"=>[0.9, 0.3, 0.6],
-    "покірність"=>[-0.2, -0.5, -0.4],
-    "оціпеніння"=>[-0.5, -0.8, 0.0],
-    "горе"=>[-0.9, -0.4, 0.1],
-    "агресія"=>[-0.4, 0.9, 0.6],
-    "оптимізм"=>[0.7, 0.4, 0.5],
-    "ремствування"=>[-0.4, 0.3, 0.2],
-    "гордість"=>[0.8, 0.5, 0.8],
-    "каяття"=>[-0.6, 0.2, -0.3],
-    "провина"=>[-0.5, 0.1, -0.2],
-    "зневага"=>[-0.3, 0.2, 0.6],
-    "нейтральний"=>[0.0, 0.0, 0.3],
+    "joy"=>[0.8, 0.6, 0.7],
+    "sadness"=>[-0.8, -0.3, 0.2],
+    "fear"=>[-0.6, 0.7, -0.4],
+    "anger"=>[-0.5, 0.8, 0.4],
+    "surprise"=>[0.2, 0.8, 0.2],
+    "revulsion"=>[-0.7, -0.2, 0.5],
+    "anticipation"=>[0.3, 0.5, 0.3],
+    "trust"=>[0.7, 0.1, 0.5],
+    "horror"=>[-0.9, 0.9, -0.5],
+    "elation"=>[0.9, 0.8, 0.7],
+    "love"=>[0.9, 0.3, 0.6],
+    "submission"=>[-0.2, -0.5, -0.4],
+    "numbness"=>[-0.5, -0.8, 0.0],
+    "grief"=>[-0.9, -0.4, 0.1],
+    "aggression"=>[-0.4, 0.9, 0.6],
+    "optimism"=>[0.7, 0.4, 0.5],
+    "grumbling"=>[-0.4, 0.3, 0.2],
+    "pride"=>[0.8, 0.5, 0.8],
+    "remorse"=>[-0.6, 0.2, -0.3],
+    "guilt"=>[-0.5, 0.1, -0.2],
+    "contempt"=>[-0.3, 0.2, 0.6],
+    "neutral"=>[0.0, 0.0, 0.3],
 )
 
 mutable struct AdaptiveEmotionMap
@@ -922,28 +922,28 @@ end
 # --- Plutchik Wheel -------------------------------------------------------
 
 const PLUTCHIK = Dict(
-    "радість"=>"Радість",
-    "смуток"=>"Смуток",
-    "страх"=>"Страх",
-    "гнів"=>"Гнів",
-    "здивування"=>"Здивування",
-    "відраза"=>"Огида",
-    "очікування"=>"Очікування",
-    "довіра"=>"Довіра",
-    "жах"=>"Жах",
-    "захват"=>"Захват",
-    "любов"=>"Любов",
-    "покірність"=>"Покірність",
-    "оціпеніння"=>"Оціпеніння",
-    "горе"=>"Горе",
-    "агресія"=>"Агресія",
-    "оптимізм"=>"Оптимізм",
-    "ремствування"=>"Ремствування",
-    "гордість"=>"Гордість",
-    "каяття"=>"Каяття",
-    "провина"=>"Провина",
-    "зневага"=>"Зневага",
-    "нейтральний"=>"Нейтральний",
+    "joy"=>"Joy",
+    "sadness"=>"Sadness",
+    "fear"=>"Fear",
+    "anger"=>"Anger",
+    "surprise"=>"Surprise",
+    "revulsion"=>"Disgust",
+    "anticipation"=>"Anticipation",
+    "trust"=>"Trust",
+    "horror"=>"Horror",
+    "elation"=>"Elation",
+    "love"=>"Love",
+    "submission"=>"Submission",
+    "numbness"=>"Numbness",
+    "grief"=>"Grief",
+    "aggression"=>"Aggression",
+    "optimism"=>"Optimism",
+    "grumbling"=>"Grumbling",
+    "pride"=>"Pride",
+    "remorse"=>"Remorse",
+    "guilt"=>"Guilt",
+    "contempt"=>"Contempt",
+    "neutral"=>"Neutral",
 )
 
 plutchik_name(emotion::String) = get(PLUTCHIK, emotion, emotion)
@@ -1006,7 +1006,7 @@ function core_load!(
     ii::InteroceptiveInference,
     ea::ExistentialAnchor,
 )::Int
-    isfile(cm.filepath) || (println("  [CORE] Нова Anima."); return 0)
+    isfile(cm.filepath) || (println("  [CORE] New Anima."); return 0)
     try
         raw=JSON3.read(read(cm.filepath, String))
         d=Dict{String,Any}(String(k)=>v for (k, v) in raw)
@@ -1018,25 +1018,25 @@ function core_load!(
         haskey(d, "interoception") && intero_from_json!(ii, d["interoception"])
         haskey(d, "existential_anchor") && anchor_from_json!(ea, d["existential_anchor"])
         cm.total_flashes = Int(get(d, "total_flashes", 0))
-        println("  [CORE] Завантажено. Спалахів: $(cm.total_flashes).")
+        println("  [CORE] Loaded. Flashes: $(cm.total_flashes).")
         cm.total_flashes
     catch e
-        println("  [CORE] Помилка: $e");
+        println("  [CORE] Error: $e");
         0
     end
 end
 
-# --- Ablation-тести суб'єктності --------------------------------------
-# Флаги вимкнення окремих шарів для перевірки чи змінюється поведінка.
-# Дефолт — усе ввімкнено (нормальний режим); задається через ENV при старті,
-# runtime-перемикання (REPL, без рестарту) — окремий крок, не тут.
+# --- Subjectivity ablation tests --------------------------------------
+# Flags for disabling individual layers to test whether behavior changes.
+# Default — everything enabled (normal mode); set via ENV at startup,
+# runtime switching (REPL, without restart) — a separate step, not here.
 struct AblationFlags
     use_memory::Bool       # episodic/semantic recall + dialog summaries + echo
     use_sbg::Bool          # SelfBeliefGraph: belief conflict, attractor_stability, epistemic_trust
     use_agency::Bool       # AgencyLoop: identity_threat, causal_ownership update
     use_latent::Bool       # LatentBuffer: resistance accumulation, breakthrough
     use_body::Bool         # EmbodiedState + InteroceptiveInference (allostatic_load)
-    use_state_prompt::Bool # весь state-блок у LLM-промпті (identity_block, memory echo, template)
+    use_state_prompt::Bool # the entire state block in the LLM prompt (identity_block, memory echo, template)
 end
 
 AblationFlags(;
@@ -1054,8 +1054,8 @@ _env_flag(name::String, default::Bool)::Bool = begin
     v in ("0", "false", "off", "no") ? false : true
 end
 
-"""Зчитує ablation-флаги з ENV: ANIMA_ABLATE_MEMORY / _SBG / _AGENCY / _LATENT / _BODY / _STATE_PROMPT.
-Кожна змінна вимикає шар при значенні "0"/"false"/"off"/"no"; відсутність змінної = увімкнено (дефолт)."""
+"""Reads ablation flags from ENV: ANIMA_ABLATE_MEMORY / _SBG / _AGENCY / _LATENT / _BODY / _STATE_PROMPT.
+Each variable disables the layer when set to "0"/"false"/"off"/"no"; absence of the variable = enabled (default)."""
 ablation_flags_from_env()::AblationFlags = AblationFlags(
     use_memory       = _env_flag("ANIMA_ABLATE_MEMORY", true),
     use_sbg          = _env_flag("ANIMA_ABLATE_SBG", true),
@@ -1073,5 +1073,5 @@ function ablation_summary(af::AblationFlags)::String
     af.use_latent        || push!(off, "latent")
     af.use_body          || push!(off, "body")
     af.use_state_prompt  || push!(off, "state_prompt")
-    isempty(off) ? "усі шари увімкнено" : "вимкнено: " * join(off, ", ")
+    isempty(off) ? "all layers enabled" : "disabled: " * join(off, ", ")
 end
