@@ -215,60 +215,25 @@ function build_inner_voice(
     phi::Float64,
     flash::Int = 0,
 )::String
-    parts = String[]
-    f = flash
-
-    if nt.noradrenaline > 0.55
-        push!(
-            parts,
-            ("серце частіше", "пульс прискорився", "щось розганяє зсередини")[f%3+1],
-        )
-    elseif nt.noradrenaline < 0.22
-        push!(parts, ("серце повільне", "ритм спокійний і рівний", "тихий пульс")[f%3+1])
-    end
-
-    if body.muscle_tension > 0.65
-        push!(parts, ("щось стиснуте", "напруга в тілі", "м'язи не відпускають")[f%3+1])
-    elseif body.muscle_tension < 0.22
-        push!(
-            parts,
-            ("м'язи відпустило", "тіло м'яке", "розслаблено, майже розчиняюсь")[f%3+1],
-        )
-    end
-
-    if body.gut_feeling < 0.30
-        push!(parts, ("нутро тривожне", "щось тисне зсередини", "неспокій у животі")[f%3+1])
-    elseif body.gut_feeling > 0.72
-        push!(parts, ("нутро спокійне", "всередині тихо", "глибокий спокій")[f%3+1])
-    end
-
-    if phi < 0.15
-        push!(
-            parts,
-            ("відчуття розпорошене", "важко зібратись докупи", "розсипаюсь на шматки")[f%3+1],
-        )
-    elseif phi > 0.50
-        push!(
-            parts,
-            ("щось зібране всередині", "відчуваю себе цілою", "є якась центральна точка")[f%3+1],
-        )
-    end
-
-    if crisis_mode_int == 2
-        push!(parts, ("не знаю де я", "межа розмита", "не можу знайти себе")[f%3+1])
-    elseif crisis_mode_int == 1
-        push!(
-            parts,
-            (
-                "тримаюсь але непевно",
-                "щось рухається всередині, ще не знаю куди",
-                "межа є але хитка",
-                "балансую на краю, не падаю",
-            )[f%4+1],
-        )
-    end
-
-    isempty(parts) ? "тіло нейтральне" : join(parts, ", ")
+    # NOTE: раніше тут була ротація готових речень (за flash%3), і одне з них —
+    # "є якась центральна точка" — прямо суперечило system_prompt.txt, який
+    # explicitly забороняє "central point"/"центральна точка" як вигадану
+    # поезію. LLM отримувала цю фразу як InnerVoice — найближчий до
+    # першої особи сигнал, "start from it" — тобто сама система підсовувала
+    # заборонений образ. Замінено на сирий вектор тілесного стану; переклад
+    # у першу особу тепер повністю на LLM, як і решта числових полів у
+    # state_template.txt ("Do NOT quote them back. Translate them into
+    # first-person presence").
+    parts = String[
+        "пульс=$(round(body.heart_rate, digits=2))",
+        "напруга=$(round(body.muscle_tension, digits=2))",
+        "нутро=$(round(body.gut_feeling, digits=2))",
+        "дихання=$(round(body.breath_rate, digits=2))",
+        "noradrenaline=$(round(nt.noradrenaline, digits=2))",
+        "φ=$(round(phi, digits=2))",
+        "crisis_mode=$crisis_mode_int",
+    ]
+    "[тіло: " * join(parts, " ") * "]"
 end
 
 body_snapshot(b::EmbodiedState) = (

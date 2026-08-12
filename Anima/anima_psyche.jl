@@ -397,37 +397,15 @@ function update_shame!(
     (sm.chronic=max(0.0, sm.chronic-0.003))
 end
 
+# NOTE: раніше тут був вибір готового речення з набору (за flash%3) — те саме
+# написане слово щоразу для одного діапазону рівня. Тепер віддаємо сирий
+# вектор стану; вербалізацію (тон, слова) робить LLM під час генерації
+# відповіді, а не заздалегідь записаний текст. Якщо результат виявиться
+# занадто сухим для LLM — це означає, що системному промпту треба окремо
+# пояснити, як читати такі [сигнал: ...] мітки, а не повертати текст сюди.
 function shame_note(sm::ShameModule, flash::Int = 0)::String
-    f = flash
-    if sm.level > 0.7
-        return (
-            "Хочеться зникнути. Не просто погано зробив — я поганий.",
-            "Соромно бути собою. Навіть наодинці.",
-            "Хочу сховатись від власного погляду.",
-        )[f%3+1]
-    end
-    if sm.level > 0.5
-        return (
-            "Відчуваю погляд зсередини. Засуджую себе.",
-            "Є вирок зсередини. Ще не знаю за що.",
-            "Щось у мені каже що я недостатня.",
-        )[f%3+1]
-    end
-    if sm.level > 0.3
-        return (
-            "Щось в мені соромиться. Не дії — себе.",
-            "Дрібний сором. Але він є.",
-            "Не горжуся собою прямо зараз.",
-        )[f%3+1]
-    end
-    if sm.chronic > 0.4
-        return (
-            "Фоновий сором. Завжди відчуваю що я недостатня.",
-            "Хронічне відчуття що щось не так зі мною.",
-            "Сором як фон. Не гостро — але завжди.",
-        )[f%3+1]
-    end
-    ""
+    sm.level < 0.3 && sm.chronic < 0.4 && return ""
+    "[сигнал: сором рівень=$(round(sm.level, digits=2)) хронічний=$(round(sm.chronic, digits=2)) джерело_погляду=$(round(sm.internalized_gaze, digits=2))]"
 end
 shame_snapshot(sm::ShameModule) = (
     level = round(sm.level, digits = 3),
@@ -444,21 +422,9 @@ function shame_from_json!(sm::ShameModule, d::AbstractDict)
 end
 
 # --- Epistemic Defense ----------------------------------------------------
-
-const EP_DESC=Dict(
-    "externalization"=>"Це не через мене — обставини так склались.",
-    "minimization"=>"Це не так серйозно як здається.",
-    "rationalization"=>"Є вагомі причини чому це правильно.",
-    "victim_framing"=>"Це сталось зі мною — я не міг вплинути.",
-    "selective_memory"=>"Пам'ятаю те що підтверджує мою правоту.",
-)
-const EP_DISTORT=Dict(
-    "externalization"=>"Це сталось через зовнішні обставини. Я зробив що міг.",
-    "minimization"=>"Насправді це не так важливо. Я перебільшував.",
-    "rationalization"=>"Є вагома причина чому все відбулось саме так.",
-    "victim_framing"=>"Я не міг вплинути на це. Так склалось.",
-    "selective_memory"=>"Пам'ятаю що намагався. Більше нічого важливого.",
-)
+# NOTE: bias-текстові описи (EP_DESC/EP_DISTORT) видалені — обчислювались,
+# але ніде не читались (ні в промпті, ні в GUI). Bias-логіка сама лишається,
+# вона реально причинна (rule-based на dissonance/shame/fatigue/moral_agency).
 
 mutable struct EpistemicDefense
     active_bias::Union{String,Nothing};
@@ -490,7 +456,6 @@ function activate_epistemic!(
     (
         bias = bias,
         strength = ed.strength,
-        description = get(EP_DESC, bias, ""),
         cost = round(ed.cost, digits = 3),
     )
 end
@@ -503,26 +468,33 @@ end
 
 # --- Symptomogenesis (Shadow → Symptom) -----------------------------------
 
+# NOTE: раніше кожен запис мав ще й готову текстову фразу — вона обчислювалась,
+# але ніде не читалась (ні в промпті, ні в GUI). Прибрано; лишився сам тип,
+# він реально використовується нижче через SYMPTOM_DIR.
 const SYMPTOM_MAP=Dict(
-    ("Гнів", "repression") => ("anger_as_depression", "Злість перетворилась на важкість."),
-    ("Гнів", "denial") => ("anger_as_passive_aggr", "Щось тихо кипить."),
-    ("Страх", "rationalization")=>("fear_as_control", "Хочу все контролювати."),
-    ("Страх", "suppression") => ("fear_as_numbness", "Оніміння."),
-    ("Смуток", "denial") => ("grief_as_numbness", "Порожньо там де мало бути боляче."),
-    ("Смуток", "displacement")=>("grief_as_irritability", "Дратує все."),
-    ("Радість", "suppression")=>("love_as_hostility", "Відштовхую те до чого тягнусь."),
-    ("Огида", "projection") =>
-        ("projection_as_contempt", "Бачу в інших те що не приймаю в собі."),
+    ("Гнів", "repression") => "anger_as_depression",
+    ("Гнів", "denial") => "anger_as_passive_aggr",
+    ("Страх", "rationalization")=>"fear_as_control",
+    ("Страх", "suppression") => "fear_as_numbness",
+    ("Смуток", "denial") => "grief_as_numbness",
+    ("Смуток", "displacement")=>"grief_as_irritability",
+    ("Радість", "suppression")=>"love_as_hostility",
+    ("Огида", "projection") => "projection_as_contempt",
 )
-const SYMPTOM_FX=Dict(
-    "anger_as_depression"=>(-0.1, -0.1, 0.0, 0.0),
-    "anger_as_passive_aggr"=>(0.08, 0.0, 0.0, 0.0),
-    "fear_as_control"=>(0.06, 0.05, 0.0, 0.0),
-    "fear_as_numbness"=>(0.0, -0.12, 0.0, 0.0),
-    "grief_as_numbness"=>(0.0, -0.08, 0.0, -0.05),
-    "grief_as_irritability"=>(0.08, 0.0, 0.0, 0.0),
-    "love_as_hostility"=>(0.05, 0.0, 0.0, -0.10),
-    "projection_as_contempt"=>(0.0, 0.0, 0.0, -0.08),
+# NOTE: раніше тут були фіксовані числа ефекту на кожен тип (той самий
+# "-0.1" щоразу, незалежно від того, наскільки сильно симптом реально
+# проявився). Лишили тільки НАПРЯМОК (який реактор і в який бік) — це
+# психологічно обґрунтована структура, не вигадка. Магнітуда тепер рахується
+# в generate_symptom! з живих сигналів (звуження уваги, prediction error).
+const SYMPTOM_DIR=Dict(
+    "anger_as_depression"=>(-1.0, -1.0, 0.0, 0.0),
+    "anger_as_passive_aggr"=>(1.0, 0.0, 0.0, 0.0),
+    "fear_as_control"=>(1.0, 1.0, 0.0, 0.0),
+    "fear_as_numbness"=>(0.0, -1.0, 0.0, 0.0),
+    "grief_as_numbness"=>(0.0, -1.0, 0.0, -1.0),
+    "grief_as_irritability"=>(1.0, 0.0, 0.0, 0.0),
+    "love_as_hostility"=>(1.0, 0.0, 0.0, -1.0),
+    "projection_as_contempt"=>(0.0, 0.0, 0.0, -1.0),
 )
 
 mutable struct ShadowSelf
@@ -545,17 +517,22 @@ function generate_symptom!(
     sg::Symptomogenesis,
     shadow::Dict{String,Int},
     defense::Union{NamedTuple,Nothing},
+    attention_radius::Float64,
+    pred_error::Float64,
 )
     (isempty(shadow)||isnothing(defense)) && return nothing
     se=argmax(shadow);
     key=(se, String(defense.mechanism))
     !haskey(SYMPTOM_MAP, key)&&return nothing
-    stype, desc=SYMPTOM_MAP[key]
+    stype=SYMPTOM_MAP[key]
+    # спотворення: звужена увага (низький radius) і висока помилка
+    # передбачення реально підсилюють прояв симптому — не просто лічильник
+    distortion = clamp01((1.0-attention_radius)*0.5 + pred_error*0.5)
     sg.active=(
         type = stype,
-        description = desc,
         source = se,
-        intensity = clamp01(shadow[se]*0.1),
+        intensity = clamp01(shadow[se]*0.1*(0.5+distortion)),
+        distortion = round(distortion, digits = 3),
     )
     enqueue!(sg.history, stype)
     sg.active
@@ -563,7 +540,9 @@ end
 
 function symptom_reactor_delta(symptom)
     isnothing(symptom) && return (0.0, 0.0, 0.0, 0.0)
-    get(SYMPTOM_FX, symptom.type, (0.0, 0.0, 0.0, 0.0))
+    dir = get(SYMPTOM_DIR, symptom.type, (0.0, 0.0, 0.0, 0.0))
+    mag = symptom.intensity*0.12
+    dir .* mag
 end
 
 # --- Chronified Affect ----------------------------------------------------
@@ -1354,35 +1333,30 @@ const DEFENSES=[
         trigger = (t, a, s, c)->t>0.7,
         relief = 0.15,
         mech = "repression",
-        desc = "Витіснення: біль витіснений.",
     ),
     (
         name = "denial",
         trigger = (t, a, s, c)->t>0.5&&s<0.3,
         relief = 0.10,
         mech = "denial",
-        desc = "Заперечення: це не так.",
     ),
     (
         name = "projection",
         trigger = (t, a, s, c)->c<0.3,
         relief = 0.08,
         mech = "projection",
-        desc = "Проекція: це в них, не в мені.",
     ),
     (
         name = "displacement",
         trigger = (t, a, s, c)->a>0.6&&c<0.4,
         relief = 0.06,
         mech = "displacement",
-        desc = "Зміщення: виліт на безпечну ціль.",
     ),
     (
         name = "suppression",
         trigger = (t, a, s, c)->t>0.6,
         relief = 0.09,
         mech = "suppression",
-        desc = "Придушення: не думаю про це.",
     ),
 ]
 
@@ -1396,7 +1370,7 @@ function activate_defense(
     for d in DEFENSES
         d.trigger(tension, arousal, satisfaction, cohesion) &&
             rand()<confabulation_rate*0.3 &&
-            return (mechanism = d.mech, description = d.desc, tension_relief = d.relief)
+            return (mechanism = d.mech, tension_relief = d.relief)
     end
     nothing
 end
@@ -1414,27 +1388,23 @@ function compute_dissonance(
         return (
             level = round((t+s)/2-0.3, digits = 3),
             label = "конфлікт досягнення і тривоги",
-            desc = "Хочу але боюсь.",
         )
     a>0.6&&c<0.3 &&
         return (
             level = round(a-c, digits = 3),
             label = "самотній у збудженні",
-            desc = "Збуджений але сам.",
         )
     c>0.6&&t>0.5 &&
         return (
             level = round((c+t)/2-0.4, digits = 3),
             label = "конфлікт близькості і загрози",
-            desc = "Близько але небезпечно.",
         )
     !isnothing(intent)&&intent.strength>0.5&&contains(intent.goal, "уникнути")&&s>0.5 &&
         return (
             level = 0.4,
             label = "конфлікт уникнення і задоволення",
-            desc = "Намір і стан суперечать.",
         )
-    (level = 0.0, label = "нейтральний", desc = "")
+    (level = 0.0, label = "нейтральний")
 end
 
 # --- Fatigue + Stress Regression ------------------------------------------

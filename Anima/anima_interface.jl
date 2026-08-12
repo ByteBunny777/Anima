@@ -830,7 +830,13 @@ function experience!(
     )
 
     # Symptom
-    symptom = generate_symptom!(a.symptomogenesis, a.shadow.content, defense)
+    symptom = generate_symptom!(
+        a.symptomogenesis,
+        a.shadow.content,
+        defense,
+        Float64(attn_snap.radius),
+        Float64(pred.error),
+    )
     sym_fx = symptom_reactor_delta(symptom)
     t_adj = clamp01(t_adj + sym_fx[1]);
     s_adj = clamp01(s + sym_fx[3])
@@ -1593,8 +1599,7 @@ function build_narrative(
         a._last_circadian_note = a.temporal.circadian_note
     end
     sm = build_inner_voice(a.body, a.nt, Int(a.crisis.current_mode), phi, a.flash_count)
-    sm != "тіло нейтральне" &&
-        push!(raw_notes, (:always, uppercase(safe_first(sm, 1))*sm[nextind(sm, 1):end]*"."))
+    push!(raw_notes, (:always, sm))
 
     !isempty(String(grav_field.note)) && push!(raw_notes, (:any, String(grav_field.note)))
     if !isnothing(self_snap)
