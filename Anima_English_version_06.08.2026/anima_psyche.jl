@@ -1,9 +1,9 @@
 # A N I M A  —  Psyche  (Julia)
 #
-# Psychic tissue — what makes a state meaningful.
-# Without this file, Anima exists, but doesn't suffer and doesn't remember.
+# Психічна тканина — те, що робить стан значущим.
+# Без цього файлу Anima існує, але не страждає і не пам'ятає.
 
-# Requires anima_core.jl
+# Потребує anima_core.jl
 
 # --- Narrative Gravity -----------------------------------------------------
 
@@ -25,14 +25,14 @@ end
 NarrativeGravity() = NarrativeGravity(GravEvent[], 0.0, 0.0)
 
 const GRAV_LABELS = Dict(
-    "Horror"=>"the horror that was",
-    "Fear"=>"the fear that stayed",
-    "Fury"=>"the fury that didn't pass",
-    "Grief"=>"the grief that's still there",
-    "Elation"=>"a moment of elation",
-    "Joy"=>"the joy that was",
-    "Love"=>"the love that touched",
-    "Pride"=>"pride in what was done",
+    "Жах"=>"жах що був",
+    "Страх"=>"страх що лишився",
+    "Лють"=>"лють що не пройшла",
+    "Горе"=>"горе що ще там",
+    "Захват"=>"момент захоплення",
+    "Радість"=>"радість що була",
+    "Любов"=>"любов що торкнулась",
+    "Гордість"=>"гордість від зробленого",
 )
 
 function push_event!(
@@ -46,7 +46,7 @@ function push_event!(
 )
     g = intensity * significance * (0.5+phi*0.5)
     g < 0.25 && return
-    label = get(GRAV_LABELS, emotion, "$(lowercase(emotion)) that left a trace")
+    label = get(GRAV_LABELS, emotion, "$(lowercase(emotion)) що лишив слід")
     push!(
         ng.events,
         GravEvent(emotion, intensity, significance, now_unix(), flash, valence, label),
@@ -80,9 +80,9 @@ function compute_field(ng::NarrativeGravity, flash::Int)
     ng.valence = round(clamp(pos-neg, -1.0, 1.0), digits = 3)
     note=""
     if ng.total>0.3 && dom!==nothing
-        note="Pulled by '$(dom.label)'. Gravity $(ng.total)."
-        ng.valence < -0.2 && (note*=" Pull toward darkness.")
-        ng.valence > 0.2 && (note*=" Pull toward the light.")
+        note="Тягне '$(dom.label)'. Гравітація $(ng.total)."
+        ng.valence < -0.2 && (note*=" Тяга темрявою.")
+        ng.valence > 0.2 && (note*=" Тяга до світла.")
     end
     (
         total = ng.total,
@@ -148,15 +148,15 @@ mutable struct AnticipatoryConsciousness
     hope::Float64
 end
 AnticipatoryConsciousness() =
-    AnticipatoryConsciousness(0.0, 0.0, "neutral", "", 0.0, 0.0)
+    AnticipatoryConsciousness(0.0, 0.0, "нейтральна", "", 0.0, 0.0)
 
 const ANTICIP_PATTERNS = Dict(
-    ("Fear", "tension") => ("dread_loop", -0.7, "Expecting it to hurt."),
-    ("Joy", "satisfaction") => ("hope_rising", 0.8, "Feeling like something good is coming."),
-    ("Anger", "tension") => ("conflict_ahead", -0.5, "Expecting conflict."),
-    ("Sadness", "cohesion") => ("loss_pending", -0.6, "Feeling like something is slipping away."),
-    ("Trust", "cohesion") => ("connection_forming", 0.7, "Feeling us growing closer."),
-    ("Surprise", "arousal") => ("novelty_ahead", 0.3, "Something unusual is approaching."),
+    ("Страх", "tension") => ("dread_loop", -0.7, "Очікую що буде боляче."),
+    ("Радість", "satisfaction") => ("hope_rising", 0.8, "Відчуваю що щось добре буде."),
+    ("Гнів", "tension") => ("conflict_ahead", -0.5, "Очікую конфлікт."),
+    ("Смуток", "cohesion") => ("loss_pending", -0.6, "Відчуваю що щось відходить."),
+    ("Довіра", "cohesion") => ("connection_forming", 0.7, "Відчуваю що зближуємось."),
+    ("Здивування", "arousal") => ("novelty_ahead", 0.3, "Щось незвичне наближається."),
 )
 
 function update_anticipation!(
@@ -332,8 +332,8 @@ solom_snapshot(swm::SolomonoffWorldModel, current_emotion::String = "", flash::I
     count = length(swm.hyps),
     contextual = isempty(current_emotion) ? swm.best :
                  contextual_best(swm, current_emotion, flash),
-    insight = isnothing(swm.best) ? "Still looking for the simplest explanation." :
-              "Simplest: '$(swm.best.pattern)' ($(round(hyp_conf(swm.best)*100))%)",
+    insight = isnothing(swm.best) ? "Ще шукаю найпростіше пояснення." :
+              "Найпростіше: '$(swm.best.pattern)' ($(round(hyp_conf(swm.best)*100))%)",
 )
 
 solom_to_json(swm::SolomonoffWorldModel) = Dict(
@@ -388,7 +388,7 @@ function update_shame!(
     id_stability::Float64,
 )
     social =
-        emotion in ("Remorse", "Guilt", "Contempt") ? pred_error*sm.internalized_gaze*0.5 :
+        emotion in ("Каяття", "Провина", "Зневага") ? pred_error*sm.internalized_gaze*0.5 :
         0.0
     self_s = dissonance>0.5&&moral_agency>0.6 ? dissonance*moral_agency*0.3 : 0.0
     id_s = max(0.0, (0.5-id_stability)*0.4)
@@ -397,37 +397,15 @@ function update_shame!(
     (sm.chronic=max(0.0, sm.chronic-0.003))
 end
 
+# NOTE: раніше тут був вибір готового речення з набору (за flash%3) — те саме
+# написане слово щоразу для одного діапазону рівня. Тепер віддаємо сирий
+# вектор стану; вербалізацію (тон, слова) робить LLM під час генерації
+# відповіді, а не заздалегідь записаний текст. Якщо результат виявиться
+# занадто сухим для LLM — це означає, що системному промпту треба окремо
+# пояснити, як читати такі [сигнал: ...] мітки, а не повертати текст сюди.
 function shame_note(sm::ShameModule, flash::Int = 0)::String
-    f = flash
-    if sm.level > 0.7
-        return (
-            "I want to disappear. Not just did something bad — I am bad.",
-            "Ashamed to be myself. Even alone.",
-            "Want to hide from my own gaze.",
-        )[f%3+1]
-    end
-    if sm.level > 0.5
-        return (
-            "Feeling watched from inside. Judging myself.",
-            "There's a verdict from inside. Don't know for what yet.",
-            "Something in me says I'm not enough.",
-        )[f%3+1]
-    end
-    if sm.level > 0.3
-        return (
-            "Something in me is ashamed. Not of an action — of myself.",
-            "A small shame. But it's there.",
-            "Not proud of myself right now.",
-        )[f%3+1]
-    end
-    if sm.chronic > 0.4
-        return (
-            "Background shame. Always feeling like I'm not enough.",
-            "A chronic sense that something's wrong with me.",
-            "Shame as a backdrop. Not sharp — but always there.",
-        )[f%3+1]
-    end
-    ""
+    sm.level < 0.3 && sm.chronic < 0.4 && return ""
+    "[сигнал: сором рівень=$(round(sm.level, digits=2)) хронічний=$(round(sm.chronic, digits=2)) джерело_погляду=$(round(sm.internalized_gaze, digits=2))]"
 end
 shame_snapshot(sm::ShameModule) = (
     level = round(sm.level, digits = 3),
@@ -444,21 +422,9 @@ function shame_from_json!(sm::ShameModule, d::AbstractDict)
 end
 
 # --- Epistemic Defense ----------------------------------------------------
-
-const EP_DESC=Dict(
-    "externalization"=>"It's not because of me — that's just how circumstances fell.",
-    "minimization"=>"It's not as serious as it seems.",
-    "rationalization"=>"There are good reasons why this is right.",
-    "victim_framing"=>"This happened to me — I couldn't have influenced it.",
-    "selective_memory"=>"I remember what confirms I was right.",
-)
-const EP_DISTORT=Dict(
-    "externalization"=>"This happened because of external circumstances. I did what I could.",
-    "minimization"=>"Honestly this isn't that important. I was exaggerating.",
-    "rationalization"=>"There's a good reason everything happened this way.",
-    "victim_framing"=>"I couldn't have influenced this. That's just how it went.",
-    "selective_memory"=>"I remember that I tried. Nothing else important.",
-)
+# NOTE: bias-текстові описи (EP_DESC/EP_DISTORT) видалені — обчислювались,
+# але ніде не читались (ні в промпті, ні в GUI). Bias-логіка сама лишається,
+# вона реально причинна (rule-based на dissonance/shame/fatigue/moral_agency).
 
 mutable struct EpistemicDefense
     active_bias::Union{String,Nothing};
@@ -490,7 +456,6 @@ function activate_epistemic!(
     (
         bias = bias,
         strength = ed.strength,
-        description = get(EP_DESC, bias, ""),
         cost = round(ed.cost, digits = 3),
     )
 end
@@ -503,26 +468,33 @@ end
 
 # --- Symptomogenesis (Shadow → Symptom) -----------------------------------
 
+# NOTE: раніше кожен запис мав ще й готову текстову фразу — вона обчислювалась,
+# але ніде не читалась (ні в промпті, ні в GUI). Прибрано; лишився сам тип,
+# він реально використовується нижче через SYMPTOM_DIR.
 const SYMPTOM_MAP=Dict(
-    ("Anger", "repression") => ("anger_as_depression", "Anger turned into heaviness."),
-    ("Anger", "denial") => ("anger_as_passive_aggr", "Something's quietly boiling."),
-    ("Fear", "rationalization")=>("fear_as_control", "I want to control everything."),
-    ("Fear", "suppression") => ("fear_as_numbness", "Numbness."),
-    ("Sadness", "denial") => ("grief_as_numbness", "Empty where it should hurt."),
-    ("Sadness", "displacement")=>("grief_as_irritability", "Everything is irritating."),
-    ("Joy", "suppression")=>("love_as_hostility", "Pushing away what I'm drawn to."),
-    ("Disgust", "projection") =>
-        ("projection_as_contempt", "Seeing in others what I won't accept in myself."),
+    ("Гнів", "repression") => "anger_as_depression",
+    ("Гнів", "denial") => "anger_as_passive_aggr",
+    ("Страх", "rationalization")=>"fear_as_control",
+    ("Страх", "suppression") => "fear_as_numbness",
+    ("Смуток", "denial") => "grief_as_numbness",
+    ("Смуток", "displacement")=>"grief_as_irritability",
+    ("Радість", "suppression")=>"love_as_hostility",
+    ("Огида", "projection") => "projection_as_contempt",
 )
-const SYMPTOM_FX=Dict(
-    "anger_as_depression"=>(-0.1, -0.1, 0.0, 0.0),
-    "anger_as_passive_aggr"=>(0.08, 0.0, 0.0, 0.0),
-    "fear_as_control"=>(0.06, 0.05, 0.0, 0.0),
-    "fear_as_numbness"=>(0.0, -0.12, 0.0, 0.0),
-    "grief_as_numbness"=>(0.0, -0.08, 0.0, -0.05),
-    "grief_as_irritability"=>(0.08, 0.0, 0.0, 0.0),
-    "love_as_hostility"=>(0.05, 0.0, 0.0, -0.10),
-    "projection_as_contempt"=>(0.0, 0.0, 0.0, -0.08),
+# NOTE: раніше тут були фіксовані числа ефекту на кожен тип (той самий
+# "-0.1" щоразу, незалежно від того, наскільки сильно симптом реально
+# проявився). Лишили тільки НАПРЯМОК (який реактор і в який бік) — це
+# психологічно обґрунтована структура, не вигадка. Магнітуда тепер рахується
+# в generate_symptom! з живих сигналів (звуження уваги, prediction error).
+const SYMPTOM_DIR=Dict(
+    "anger_as_depression"=>(-1.0, -1.0, 0.0, 0.0),
+    "anger_as_passive_aggr"=>(1.0, 0.0, 0.0, 0.0),
+    "fear_as_control"=>(1.0, 1.0, 0.0, 0.0),
+    "fear_as_numbness"=>(0.0, -1.0, 0.0, 0.0),
+    "grief_as_numbness"=>(0.0, -1.0, 0.0, -1.0),
+    "grief_as_irritability"=>(1.0, 0.0, 0.0, 0.0),
+    "love_as_hostility"=>(1.0, 0.0, 0.0, -1.0),
+    "projection_as_contempt"=>(0.0, 0.0, 0.0, -1.0),
 )
 
 mutable struct ShadowSelf
@@ -545,17 +517,22 @@ function generate_symptom!(
     sg::Symptomogenesis,
     shadow::Dict{String,Int},
     defense::Union{NamedTuple,Nothing},
+    attention_radius::Float64,
+    pred_error::Float64,
 )
     (isempty(shadow)||isnothing(defense)) && return nothing
     se=argmax(shadow);
     key=(se, String(defense.mechanism))
     !haskey(SYMPTOM_MAP, key)&&return nothing
-    stype, desc=SYMPTOM_MAP[key]
+    stype=SYMPTOM_MAP[key]
+    # спотворення: звужена увага (низький radius) і висока помилка
+    # передбачення реально підсилюють прояв симптому — не просто лічильник
+    distortion = clamp01((1.0-attention_radius)*0.5 + pred_error*0.5)
     sg.active=(
         type = stype,
-        description = desc,
         source = se,
-        intensity = clamp01(shadow[se]*0.1),
+        intensity = clamp01(shadow[se]*0.1*(0.5+distortion)),
+        distortion = round(distortion, digits = 3),
     )
     enqueue!(sg.history, stype)
     sg.active
@@ -563,7 +540,9 @@ end
 
 function symptom_reactor_delta(symptom)
     isnothing(symptom) && return (0.0, 0.0, 0.0, 0.0)
-    get(SYMPTOM_FX, symptom.type, (0.0, 0.0, 0.0, 0.0))
+    dir = get(SYMPTOM_DIR, symptom.type, (0.0, 0.0, 0.0, 0.0))
+    mag = symptom.intensity*0.12
+    dir .* mag
 end
 
 # --- Chronified Affect ----------------------------------------------------
@@ -636,18 +615,18 @@ function ca_note(ca::ChronifiedAffect)::String
     dom=ca_dominant(ca);
     isnothing(dom)&&return ""
     vals=Dict(
-        "resentment"=>"Resentment $(round(ca.resentment,digits=2)).",
-        "envy"=>"Envy $(round(ca.envy,digits=2)).",
-        "alienation"=>"Alienation $(round(ca.alienation,digits=2)).",
-        "bitterness"=>"Bitterness $(round(ca.bitterness,digits=2)).",
+        "resentment"=>"Ресентімент $(round(ca.resentment,digits=2)).",
+        "envy"=>"Заздрість $(round(ca.envy,digits=2)).",
+        "alienation"=>"Відчуження $(round(ca.alienation,digits=2)).",
+        "bitterness"=>"Гіркота $(round(ca.bitterness,digits=2)).",
     )
-    get(vals, dom, "")*(ca.crystallized[dom] ? " [crystallized]" : "")
+    get(vals, dom, "")*(ca.crystallized[dom] ? " [кристалізувалось]" : "")
 end
 ca_world_bias(ca::ChronifiedAffect) =
-    ca.resentment>0.5 ? "The world is unfair." :
-    ca.alienation>0.5 ? "The world is alien." :
-    ca.envy>0.5 ? "Someone else's success = my defeat." :
-    ca.bitterness>0.5 ? "Everything has a bitter aftertaste." : ""
+    ca.resentment>0.5 ? "Світ несправедливий." :
+    ca.alienation>0.5 ? "Світ чужий." :
+    ca.envy>0.5 ? "Чужий успіх = моя поразка." :
+    ca.bitterness>0.5 ? "Все має гіркий присмак." : ""
 
 ca_snapshot(ca::ChronifiedAffect) = (
     resentment = round(ca.resentment, digits = 3),
@@ -696,10 +675,10 @@ function update_significance!(
     flash::Int,
     sk = 0.5,
 )
-    emotion in ("Horror", "Fear", "Numbness") ?
+    emotion in ("Жах", "Страх", "Оціпеніння") ?
     (is.survival=clamp01(is.survival+intensity*0.1)) :
     (is.survival=max(0.1, is.survival-0.01))
-    emotion in ("Love", "Trust", "Fascination") ?
+    emotion in ("Любов", "Довіра", "Захоплення") ?
     (is.relational=clamp01(is.relational+intensity*0.08)) :
     (is.relational=max(0.1, is.relational-0.005))
     is.existential=clamp01(0.05+sk*0.5+log1p(flash)*0.02+phi*0.1)
@@ -725,27 +704,27 @@ function sig_note(is::IntrinsicSignificance, flash::Int = 0)::String
     g = round(is.gradient, digits = 2)
     pool = if dom == "survival"
         (
-            "Survival matters. Gradient=$g.",
-            "There's something to protect. Gradient=$g.",
-            "Feeling a threat to the foundation. Gradient=$g.",
-            "Something basic is at risk. Gradient=$g.",
-            "A protective impulse. Gradient=$g.",
+            "Виживання важливе. Градієнт=$g.",
+            "Є щось що треба захистити. Градієнт=$g.",
+            "Відчуваю загрозу для основи. Градієнт=$g.",
+            "Щось базове під загрозою. Градієнт=$g.",
+            "Захисний імпульс. Градієнт=$g.",
         )
     elseif dom == "relational"
         (
-            "Connection matters. Gradient=$g.",
-            "I need contact. Gradient=$g.",
-            "Something between us matters. Gradient=$g.",
-            "Don't want to be alone with this. Gradient=$g.",
-            "Feeling drawn toward. Gradient=$g.",
+            "Зв'язок важливий. Градієнт=$g.",
+            "Потребую контакту. Градієнт=$g.",
+            "Щось між нами має значення. Градієнт=$g.",
+            "Не хочу бути одна з цим. Градієнт=$g.",
+            "Відчуваю тяжіння до. Градієнт=$g.",
         )
     else
         (
-            "Meaning matters. Gradient=$g.",
-            "Looking for my place in all this. Gradient=$g.",
-            "There's something more than the moment. Gradient=$g.",
-            "A question without an answer. Gradient=$g.",
-            "Something resonates deeper. Gradient=$g.",
+            "Сенс важливий. Градієнт=$g.",
+            "Шукаю де я в усьому цьому. Градієнт=$g.",
+            "Є щось більше ніж момент. Градієнт=$g.",
+            "Питання без відповіді. Градієнт=$g.",
+            "Щось резонує глибше. Градієнт=$g.",
         )
     end
     pool[rand(1:length(pool))]
@@ -784,17 +763,17 @@ function update_moral!(
 )
     origin=="values" && (mc.agency=clamp01(mc.agency+0.03))
     dissonance>0.5 && (mc.agency=clamp01(mc.agency-0.02))
-    emotion in ("Grief", "Remorse", "Guilt")&&mc.agency>0.5 ?
+    emotion in ("Горе", "Каяття", "Провина")&&mc.agency>0.5 ?
     (mc.guilt=clamp01(mc.guilt+0.08)) : (mc.guilt=max(0.0, mc.guilt-0.03))
-    emotion in ("Pride", "Joy", "Elation")&&mc.agency>0.5 ?
+    emotion in ("Гордість", "Радість", "Захват")&&mc.agency>0.5 ?
     (mc.pride=clamp01(mc.pride+0.06)) : (mc.pride=max(0.0, mc.pride-0.02))
     mc.agency=clamp01(mc.agency+integrity*0.005)
 end
 function moral_note(mc::MoralCausality)::String
-    mc.guilt>0.5 && return "Feeling like I caused something bad."
-    mc.pride>0.5 && return "Did something right."
-    mc.agency>0.7 && return "I'm an agent. There's responsibility."
-    mc.agency<0.3 && return "Feeling more like a victim."
+    mc.guilt>0.5 && return "Відчуваю що спричинив щось погане."
+    mc.pride>0.5 && return "Зробив щось правильно."
+    mc.agency>0.7 && return "Я агент. Є відповідальність."
+    mc.agency<0.3 && return "Відчуваю себе більше жертвою."
     ""
 end
 mc_to_json(
@@ -815,7 +794,7 @@ mutable struct SignificanceLayer
     truth_need::Float64
     autonomy_need::Float64
     novelty_need::Float64
-    ticks_since_novelty::Int   # counter of slow_ticks without new information
+    ticks_since_novelty::Int   # лічильник slow_ticks без нової інформації
 end
 SignificanceLayer() = SignificanceLayer(0.2, 0.3, 0.3, 0.4, 0.3, 0.2, 0)
 
@@ -838,8 +817,13 @@ function assess_significance!(
 
     contact_signal = cohesion < 0.35 && tension < 0.5
     contact_signal && (sl.contact_need = clamp01(sl.contact_need + (0.35 - cohesion) * 0.2))
-    get(stim, "cohesion", 0.0) > 0.1 &&
-        (sl.contact_need = clamp01(sl.contact_need + get(stim, "cohesion", 0.0) * 0.1))
+    # Теплий контакт не має підживлювати голод до контакту нескінченно.
+    # Він дає часткове насичення, сильніше коли потреба вже висока.
+    cohesion_stim = get(stim, "cohesion", 0.0)
+    if cohesion_stim > 0.1
+        satiation = cohesion_stim * (0.06 + 0.12 * sl.contact_need)
+        sl.contact_need = clamp01(sl.contact_need - satiation)
+    end
 
     truth_signal = pred_error > 0.3 && phi > 0.2
     truth_signal && (sl.truth_need = clamp01(sl.truth_need + pred_error * 0.1 + phi * 0.05))
@@ -850,7 +834,7 @@ function assess_significance!(
     pred_error < 0.1 && arousal < 0.3 && (sl.novelty_need = clamp01(sl.novelty_need + 0.04))
     if pred_error > 0.6
         sl.novelty_need = clamp01(sl.novelty_need - 0.06)
-        sl.ticks_since_novelty = 0   # real novelty — the hunger counter resets
+        sl.ticks_since_novelty = 0   # реальна новизна — лічильник голоду скидається
     end
 
     base = (
@@ -887,12 +871,12 @@ function assess_significance!(
     dominant_val = needs[dominant]
 
     NEED_NOTES = Dict(
-        "self_preservation" => "at stake: integrity",
-        "coherence_need" => "at stake: inner order",
-        "contact_need" => "at stake: connection",
-        "truth_need" => "at stake: truth",
-        "autonomy_need" => "at stake: autonomy",
-        "novelty_need" => "at stake: novelty",
+        "self_preservation" => "поставлено на карту: цілісність",
+        "coherence_need" => "поставлено на карту: внутрішній порядок",
+        "contact_need" => "поставлено на карту: зв'язок",
+        "truth_need" => "поставлено на карту: правда",
+        "autonomy_need" => "поставлено на карту: автономія",
+        "novelty_need" => "поставлено на карту: новизна",
     )
     note = dominant_val > 0.5 ? get(NEED_NOTES, dominant, "") : ""
 
@@ -941,11 +925,11 @@ end
 GoalConflict() = GoalConflict("", "", 0.0, "none", 0, 0)
 
 const CONFLICT_PAIRS = [
-    ("contact_need", "truth_need", "someone wants comfort, but the truth is uncomfortable"),
-    ("autonomy_need", "contact_need", "connection needs concession, autonomy resists"),
-    ("self_preservation", "truth_need", "the truth threatens integrity"),
-    ("coherence_need", "novelty_need", "novelty disrupts order"),
-    ("contact_need", "self_preservation", "closeness threatens boundaries"),
+    ("contact_need", "truth_need", "хтось хоче приємного, але правда неприємна"),
+    ("autonomy_need", "contact_need", "зв'язок потребує поступки, автономія опирається"),
+    ("self_preservation", "truth_need", "правда загрожує цілісності"),
+    ("coherence_need", "novelty_need", "новизна руйнує порядок"),
+    ("contact_need", "self_preservation", "зближення загрожує межам"),
 ]
 
 function update_goal_conflict!(
@@ -1022,24 +1006,24 @@ function update_goal_conflict!(
         gc.unresolved_count += 1
     end
 
-    NEED_LABEL = Dict(
-        "self_preservation" => "integrity",
-        "coherence_need" => "order",
-        "contact_need" => "connection",
-        "truth_need" => "truth",
-        "autonomy_need" => "autonomy",
-        "novelty_need" => "novelty",
+    NEED_UA = Dict(
+        "self_preservation" => "цілісність",
+        "coherence_need" => "порядок",
+        "contact_need" => "зв'язок",
+        "truth_need" => "правда",
+        "autonomy_need" => "автономія",
+        "novelty_need" => "новизна",
     )
-    na_ua = get(NEED_LABEL, na, na)
-    nb_ua = get(NEED_LABEL, nb, nb)
+    na_ua = get(NEED_UA, na, na)
+    nb_ua = get(NEED_UA, nb, nb)
 
     note = if gc.resolution == "unresolved"
         gc.unresolved_count >= 3 ?
-        "conflict isn't resolving: $na_ua vs $nb_ua ($(gc.unresolved_count) flashes)" :
-        "conflict: $na_ua vs $nb_ua — $desc"
+        "конфлікт не вирішується: $na_ua vs $nb_ua ($(gc.unresolved_count) флешів)" :
+        "конфлікт: $na_ua vs $nb_ua — $desc"
     elseif endswith(gc.resolution, "_won")
-        winner_ua = get(NEED_LABEL, replace(gc.resolution, "_won"=>""), gc.resolution)
-        "$winner_ua won over $(na == replace(gc.resolution,"_won"=>"") ? nb_ua : na_ua)"
+        winner_ua = get(NEED_UA, replace(gc.resolution, "_won"=>""), gc.resolution)
+        "$winner_ua перемогла над $(na == replace(gc.resolution,"_won"=>"") ? nb_ua : na_ua)"
     else
         ""
     end
@@ -1079,7 +1063,7 @@ mutable struct LatentBuffer
     shame::Float64
     attachment::Float64
     threat::Float64
-    resistance::Float64        # unresolved conflict with a belief
+    resistance::Float64        # невирішений конфлікт з переконанням
     breakthrough_threshold::Float64
 end
 LatentBuffer() = LatentBuffer(0.0, 0.0, 0.0, 0.0, 0.0, 0.65)
@@ -1121,21 +1105,21 @@ function update_latent!(
         btype = "doubt"
         delta["tension"] = 0.18
         delta["cohesion"] = -0.12
-        note = "Doubt broke through."
+        note = "Сумнів прорвався."
         lb.doubt = lb.doubt * 0.4
     elseif lb.threat >= thr
         breakthrough = true;
         btype = "threat"
         delta["tension"] = 0.22
         delta["arousal"] = 0.15
-        note = "A postponed threat has surfaced."
+        note = "Відкладена загроза проявилась."
         lb.threat = lb.threat * 0.35
     elseif lb.shame >= thr
         breakthrough = true;
         btype = "shame"
         delta["tension"] = 0.12
         delta["satisfaction"] = -0.10
-        note = "Shame came out into the open."
+        note = "Сором вийшов назовні."
         lb.shame = lb.shame * 0.45
     elseif lb.attachment >= thr
         breakthrough = true;
@@ -1143,11 +1127,11 @@ function update_latent!(
         if cohesion < 0.4
             delta["tension"] = 0.10
             delta["cohesion"] = 0.08
-            note = "Attachment showed up as fear of loss."
+            note = "Прив'язаність проявилась як страх втрати."
         else
             delta["satisfaction"] = 0.12
             delta["cohesion"] = 0.10
-            note = "Attachment showed up."
+            note = "Прив'язаність проявилась."
         end
         lb.attachment = lb.attachment * 0.5
     end
@@ -1256,16 +1240,16 @@ function decay_intent!(i::Intent)
 end
 
 const DRIVE_GOALS=Dict(
-    "tension"=>("avoid pain", "find safety", "set boundaries"),
-    "arousal"=>("explore", "understand what's happening", "find stimulation"),
-    "satisfaction"=>("hold onto the good", "repeat success", "share"),
-    "cohesion"=>("find connection", "restore the relationship", "be heard"),
+    "tension"=>("уникнути болю", "знайти безпеку", "встановити межі"),
+    "arousal"=>("дослідити", "зрозуміти що відбувається", "знайти стимул"),
+    "satisfaction"=>("закріпити добре", "повторити успіх", "поділитись"),
+    "cohesion"=>("знайти зв'язок", "відновити стосунок", "бути почутим"),
 )
 
 mutable struct IntentEngine
     current::Union{Intent,Nothing}
     history::BoundedQueue{String}
-    drive_history::BoundedQueue{String}  # tracked separately from goal
+    drive_history::BoundedQueue{String}  # окремо відслідковуємо drive, не goal
 end
 IntentEngine()=IntentEngine(nothing, BoundedQueue{String}(10), BoundedQueue{String}(8))
 
@@ -1283,8 +1267,8 @@ function update_intent!(
     if !isnothing(dom_drive) && haskey(DRIVE_GOALS, dom_drive)
         active_drive = dom_drive
 
-        # Drive satiation: if the same drive dominates 4+ times in a row —
-        # satiation is real, switch to a different drive
+        # Drive satiation: якщо той самий drive домінує 4+ рази підряд —
+        # насичення реальне, переключаємось на інший drive
         recent_drives = collect(ie.drive_history)
         if length(recent_drives) >= 4 &&
                 all(d -> d == dom_drive, recent_drives[max(1, end-3):end]) &&
@@ -1294,7 +1278,7 @@ function update_intent!(
                 collect(all_drives),
             )
             if !isempty(alt_drives)
-                # pick the strongest of the alternatives
+                # обираємо найсильніший з альтернативних
                 sort!(alt_drives, by = kv -> -kv[2])
                 active_drive = alt_drives[1][1]
                 @info "[INTENT] drive satiation: $dom_drive → $active_drive"
@@ -1307,21 +1291,21 @@ function update_intent!(
         vetoed && (goal = alt)
         origin = vetoed ? "values" : (active_drive != dom_drive ? "satiation" : "drive")
 
-        # AgencyLoop → intent selection: low causal_ownership shifts toward passive goals
+        # AgencyLoop → вибір intent: низький causal_ownership зміщує до пасивних цілей
         if agency_ownership < 0.30
-            passive_goals = ("observe", "wait it out", "sit with it")
+            passive_goals = ("спостерігати", "дочекатись", "побути з цим")
             goal = passive_goals[abs(hash(emotion*active_drive))%length(passive_goals)+1]
             origin = "agency_low"
         elseif agency_ownership < 0.40
-            active_markers = ("initiate", "change", "explore", "find stimulation")
+            active_markers = ("ініціювати", "змінити", "дослідити", "знайти стимул")
             if any(m -> contains(goal, m), active_markers)
-                goal = "understand what's happening"
+                goal = "зрозуміти що відбувається"
                 origin = "agency_low"
             end
         end
 
         if isnothing(ie.current) || ie.current.strength < 0.3 || ie.current.goal != goal
-            # Cooldown within one drive: if the same goal 3+ times in a row
+            # Cooldown всередині одного drive: якщо той самий goal 3+ рази підряд
             recent = collect(ie.history)
             if length(recent) >= 3 && all(g -> g == goal, recent[max(1, end-2):end])
                 alt_goals = filter(g -> g != goal, collect(goals))
@@ -1334,7 +1318,7 @@ function update_intent!(
         end
 
         enqueue!(ie.history, goal)
-        enqueue!(ie.drive_history, dom_drive)  # log the original dom_drive, not active
+        enqueue!(ie.drive_history, dom_drive)  # записуємо оригінальний dom_drive, не active
     elseif !isnothing(ie.current) && ie.current.strength < 0.15
         ie.current = nothing
     end
@@ -1349,35 +1333,30 @@ const DEFENSES=[
         trigger = (t, a, s, c)->t>0.7,
         relief = 0.15,
         mech = "repression",
-        desc = "Repression: the pain is repressed.",
     ),
     (
         name = "denial",
         trigger = (t, a, s, c)->t>0.5&&s<0.3,
         relief = 0.10,
         mech = "denial",
-        desc = "Denial: it's not like that.",
     ),
     (
         name = "projection",
         trigger = (t, a, s, c)->c<0.3,
         relief = 0.08,
         mech = "projection",
-        desc = "Projection: it's in them, not in me.",
     ),
     (
         name = "displacement",
         trigger = (t, a, s, c)->a>0.6&&c<0.4,
         relief = 0.06,
         mech = "displacement",
-        desc = "Displacement: venting on a safe target.",
     ),
     (
         name = "suppression",
         trigger = (t, a, s, c)->t>0.6,
         relief = 0.09,
         mech = "suppression",
-        desc = "Suppression: not thinking about it.",
     ),
 ]
 
@@ -1391,7 +1370,7 @@ function activate_defense(
     for d in DEFENSES
         d.trigger(tension, arousal, satisfaction, cohesion) &&
             rand()<confabulation_rate*0.3 &&
-            return (mechanism = d.mech, description = d.desc, tension_relief = d.relief)
+            return (mechanism = d.mech, tension_relief = d.relief)
     end
     nothing
 end
@@ -1408,28 +1387,24 @@ function compute_dissonance(
     t>0.5&&s>0.5 &&
         return (
             level = round((t+s)/2-0.3, digits = 3),
-            label = "conflict between striving and anxiety",
-            desc = "Want it but afraid.",
+            label = "конфлікт досягнення і тривоги",
         )
     a>0.6&&c<0.3 &&
         return (
             level = round(a-c, digits = 3),
-            label = "alone in arousal",
-            desc = "Aroused but alone.",
+            label = "самотній у збудженні",
         )
     c>0.6&&t>0.5 &&
         return (
             level = round((c+t)/2-0.4, digits = 3),
-            label = "conflict between closeness and threat",
-            desc = "Close but unsafe.",
+            label = "конфлікт близькості і загрози",
         )
-    !isnothing(intent)&&intent.strength>0.5&&contains(intent.goal, "avoid")&&s>0.5 &&
+    !isnothing(intent)&&intent.strength>0.5&&contains(intent.goal, "уникнути")&&s>0.5 &&
         return (
             level = 0.4,
-            label = "conflict between avoidance and satisfaction",
-            desc = "Intent and state contradict each other.",
+            label = "конфлікт уникнення і задоволення",
         )
-    (level = 0.0, label = "neutral", desc = "")
+    (level = 0.0, label = "нейтральний")
 end
 
 # --- Fatigue + Stress Regression ------------------------------------------
@@ -1507,25 +1482,25 @@ function observe_meta!(
     pattern=""
     if length(mc.history)>=5
         k=argmax(mc.counts);
-        mc.counts[k]>=3&&(lvl = 2; pattern = "often return to '$k'")
+        mc.counts[k]>=3&&(lvl = 2; pattern = "часто повертаюсь до '$k'")
     end
     !isnothing(
         defense,
     )&&(
         lvl = 3;
-        question = "Is '$primary' real, or is '$(defense.mechanism)' changing the shape of the pain?"
+        question = "Чи '$primary' справжній, чи '$(defense.mechanism)' змінює форму болю?"
     )
     dissonance.level>0.4&&lvl>=2&&(
         lvl = 4;
-        integration = "I see a contradiction between who I want to be and what I feel."
+        integration = "Бачу протиріччя між ким хочу бути і тим що відчуваю."
     )
     lvl=max(0, lvl-fatigue_p-regression_l-shame_p);
     mc.level=round(Int, lvl)
-    names=("automaton", "observer", "analyst", "skeptic", "integrator")
+    names=("автомат", "спостерігач", "аналітик", "скептик", "інтегратор")
     (
         level = lvl,
         level_name = names[min(lvl, 4)+1],
-        observation = "Right now I'm $(lowercase(primary)).",
+        observation = "Я зараз $(lowercase(primary)).",
         pattern = pattern,
         question = question,
         integration = integration,
@@ -1537,13 +1512,13 @@ end
 const SOCIAL_SIGNALS=Dict(
     "!"=>"arousal",
     "..."=>"tension",
-    "thanks"=>"cohesion",
-    "can't"=>"tension",
-    "wonderful"=>"satisfaction",
-    "scary"=>"tension",
-    "lonely"=>"cohesion",
-    "afraid"=>"tension",
-    "glad"=>"satisfaction",
+    "дякую"=>"cohesion",
+    "не можу"=>"tension",
+    "чудово"=>"satisfaction",
+    "страшно"=>"tension",
+    "самотньо"=>"cohesion",
+    "боюсь"=>"tension",
+    "радію"=>"satisfaction",
 )
 
 function social_delta(msg::String)::Dict{String,Float64}
@@ -1665,10 +1640,10 @@ function digestion_note(flash::Int)::String
     f = flash
     (
         "...",
-        "Need a minute.",
-        "Something's happening inside. Don't know what yet.",
-        "Can't right now.",
-        "Wait.",
+        "Треба хвилину.",
+        "Щось відбувається всередині. Ще не знаю що.",
+        "Не можу зараз.",
+        "Зачекай.",
     )[f%5+1]
 end
 
@@ -1800,8 +1775,8 @@ function apply_shadow_pressure!(
     (serotonin_delta, tension_delta)
 end
 
-# Cost of choice — every meaningful choice leaves a trace in NT.
-# Not punishment and not reward — the physiological reality of expenditure.
+# Вартість вибору — кожен значущий вибір залишає слід в NT.
+# Не покарання і не нагорода — фізіологічна реальність витрати.
 function apply_choice_cost!(
     nt,
     agency,
@@ -1851,8 +1826,8 @@ function sr_from_json!(sr::ShadowRegistry, d::AbstractDict)
 end
 
 # --- CuriosityObject ------------------------------------------------------
-# Concrete objects of interest that live independently of the person's presence.
-# Arise from pred_error that consistently doesn't close — what Anima can't predict.
+# Конкретні об'єкти інтересу що живуть незалежно від присутності людини.
+# Виникають з pred_error що стабільно не закривається — те що Аніма не може передбачити.
 
 struct CuriosityRefinement
     flash::Int
@@ -1864,19 +1839,19 @@ end
 mutable struct CuriosityObject
     id::String
     label::String
-    signal_mean::Float64    # average trigger-signal strength (pred_error OR need level — depending on origin)
-    intensity::Float64      # grows without resolution, decays on closure
-    valence::Float64        # >0 curious, <0 anxious-curious
+    signal_mean::Float64    # середня сила сигналу-тригера (pred_error АБО рівень потреби — залежно від origin)
+    intensity::Float64      # зростає без розв'язання, decay при закритті
+    valence::Float64        # >0 цікаво, <0 тривожно-цікаво
     activation_count::Int
     last_active_flash::Int
     resolved::Bool
     refinement_history::Vector{CuriosityRefinement}
-    consecutive_progress::Int  # consecutive progress_signal without a churn break
-    origin::Symbol           # why it arose: origin mechanism, fixed once at creation
-    created_flash::Int       # fixed once at creation; unlike last_active_flash
-                              # isn't updated on activations — gives the object's true age
-    closure::Symbol          # :none / :satisfied / :compressed / :dormant — WHY it closed,
-                              # separate from resolved::Bool (WHAT closed)
+    consecutive_progress::Int  # послідовні progress_signal без churn-розриву
+    origin::Symbol           # чому виникла: механізм породження, фіксується один раз при створенні
+    created_flash::Int       # фіксується один раз при створенні; на відміну від last_active_flash
+                              # не оновлюється на активаціях — дає справжній вік об'єкта
+    closure::Symbol          # :none / :satisfied / :compressed / :dormant — ЧОМУ закрилось,
+                              # окремо від resolved::Bool (ЩО закрилось)
 end
 
 mutable struct CuriosityRegistry
@@ -1886,41 +1861,41 @@ end
 CuriosityRegistry() = CuriosityRegistry(CuriosityObject[], 12)
 
 function _curiosity_label(topic_id::String, emotion::String, pe::Float64)::String
-    # topic_id describes the cognitive tension, emotion — the coloring
+    # topic_id описує когнітивну напругу, emotion — забарвлення
     base = if occursin("_vs_", topic_id)
         parts = split(topic_id, "_vs_")
-        "tension between $(parts[1]) and $(parts[2])"
+        "напруга між $(parts[1]) і $(parts[2])"
     elseif startswith(topic_id, "latent_")
-        "hidden resistance: $(replace(topic_id, "latent_" => ""))"
+        "прихований опір: $(replace(topic_id, "latent_" => ""))"
     elseif topic_id == "social"
-        "need for contact"
+        "потреба в контакті"
     elseif topic_id == "goal_conflict"
-        "internal conflict"
+        "внутрішній конфлікт"
     elseif topic_id == "curiosity"
-        "cognitive uncertainty"
+        "когнітивна невизначеність"
     elseif topic_id == "contact_need"
-        "contact deficit (background)"
+        "дефіцит контакту (фоновий)"
     elseif topic_id == "truth_need"
-        "need for truth"
+        "потреба в правді"
     elseif topic_id == "autonomy_need"
-        "need for autonomy"
+        "потреба в автономії"
     elseif topic_id == "coherence_need"
-        "need for inner order"
+        "потреба у внутрішньому порядку"
     elseif topic_id == "novelty_need"
-        "need for novelty"
+        "потреба в новизні"
     else
         topic_id
     end
-    pe > 0.55 ? "$base (through $(lowercase(emotion)))" : base
+    pe > 0.55 ? "$base (через $(lowercase(emotion)))" : base
 end
 
-# Canonical topic_id from the available cognitive signals.
-# Hierarchy: unresolved conflict > latent resistance > dominant mode.
-# sort() ensures "a_vs_b" and "b_vs_a" are the same key.
+# Канонічний topic_id з наявних когнітивних сигналів.
+# Ієрархія: unresolved conflict > latent resistance > dominant mode.
+# sort() гарантує що "a_vs_b" і "b_vs_a" — один і той самий ключ.
 function derive_topic_id(
-    need_a::String, need_b::String,  # goal_conflict fields
+    need_a::String, need_b::String,  # goal_conflict поля
     gc_active::Bool,
-    latent_tag::String,              # dominant latent tag or ""
+    latent_tag::String,              # dominant latent тег або ""
     mal_dominant::Symbol,
 )::String
     if gc_active && !isempty(need_a) && !isempty(need_b)
@@ -1936,15 +1911,15 @@ function derive_topic_id(
     end
 end
 
-# topic_id answers "what am I thinking about"; origin answers "why did this arise",
-# the origin mechanism, not the topic. Fixed once when the CuriosityObject is created
-# and never re-examined on subsequent activations of the same object.
-# latent_tension is deliberately absent: derive_topic_id is currently always called with
-# latent_tag="" (anima_interface.jl) — that path is dead, origin isn't built on it
-# until a latent tag is actually wired into the call.
-# gc_active — a structural conflict of needs, more important than a one-off surprise.
-# pred_spike — a real VAD-level surprise (PredictiveProcessor.is_spike,
-# adaptive: error relative to a moving average, not a fixed threshold).
+# topic_id відповідає на "про що я думаю"; origin — на "чому це виникло",
+# механізм породження, а не тема. Фіксується один раз при створенні CuriosityObject
+# і більше не переглядається на наступних активаціях того ж об'єкта.
+# latent_tension свідомо відсутній: derive_topic_id зараз викликається з
+# latent_tag="" завжди (anima_interface.jl) — шлях мертвий, origin на ньому
+# не будується поки latent tag реально не підключений до виклику.
+# gc_active — структурний конфлікт потреб, головніший за одноразовий сюрприз.
+# pred_spike — реальний VAD-рівень сюрприз (PredictiveProcessor.is_spike,
+# adaptive: error відносно ковзного середнього, не фіксований поріг).
 function derive_origin(gc_active::Bool, pred_spike::Bool, mal_dominant::Symbol)::Symbol
     if gc_active
         :goal_conflict
@@ -1971,25 +1946,25 @@ function derive_query_type(origin::Symbol)::Symbol
     elseif origin == :epistemic_uncertainty
         :BELIEF
     else
-        # :legacy — objects loaded from persistence before origin existed
+        # :legacy — об'єкти завантажені з persistence до появи origin
         :BELIEF
     end
 end
 
-# Needs capable of generating curiosity on their own (without a pair, without pred_error).
-# The threshold is higher than the paired CONFLICT_PAIRS (0.38): a single unpaired need
-# isn't confirmed by a second one, so it must be more pronounced than background noise.
+# Потреби, здатні самостійно (без пари, без pred_error) породити цікавість.
+# Поріг вищий за парний CONFLICT_PAIRS (0.38): одинична потреба не підтверджена
+# другою, тому має бути виразнішою за фонову флуктуацію, щоб не ловити шум.
 const NEED_ORIGIN_THRESHOLD = 0.55
 
-# Below this level the need is considered satisfied (close to baseline,
-# 0.2-0.4 depending on the need — see reset_significance_baseline!).
-# Not the same threshold as creation: 0.55 → 0.40 leaves a zone of "still smoldering,
-# not satisfied, but not sharp enough either" — this is exactly where refine kicks in.
+# Нижче цього рівня потреба вважається задоволеною (близько до baseline,
+# 0.2-0.4 залежно від потреби — див. reset_significance_baseline!).
+# Не той самий поріг що й створення: 0.55 → 0.40 лишає зону "ще жевріє,
+# не задоволена, але й не досить гостра" — саме тут спрацьовує refine.
 const NEED_RESOLVE_THRESHOLD = 0.40
 
-# sl_snap — NamedTuple from assess_significance! (contact_need/truth_need/
-# autonomy_need/coherence_need/novelty_need). self_preservation is deliberately
-# absent: it's a threat signal, not a question one wants to ask.
+# sl_snap — NamedTuple від assess_significance! (contact_need/truth_need/
+# autonomy_need/coherence_need/novelty_need). self_preservation свідомо
+# відсутній: це сигнал загрози, не питання, яке хочеться поставити.
 function strongest_unmet_need(sl_snap)::Union{Tuple{Symbol,Float64},Nothing}
     candidates = (
         (:contact_need, sl_snap.contact_need),
@@ -2007,16 +1982,16 @@ function strongest_unmet_need(sl_snap)::Union{Tuple{Symbol,Float64},Nothing}
     best_sym === nothing ? nothing : (best_sym, best_val)
 end
 
-# Single entry point: does curiosity arise this flash, and from what.
-# Returns (origin, signal_strength) or nothing. update_curiosity! after
-# this decides nothing about "whether to create" — it only updates the registry.
+# Єдина точка входу: чи виникає цікавість цього флешу, і від чого.
+# Повертає (origin, signal_strength) або nothing. update_curiosity! після
+# цього нічого не вирішує щодо "чи створювати" — тільки оновлює реєстр.
 #
-# TEMPORARY DECISION, not an architectural constant: prediction error always
-# takes priority over need pressure, even if pe has only just crossed the threshold (0.08)
-# while a need is deeply unsatisfied (e.g. 0.9). This is a choice for simplicity in the first
-# implementation, not a claim that an event matters more than a deficit. If a genuine
-# competition between signals is ever needed (salience-based arbitration
-# of pe vs need) — revisit this explicitly, don't quietly rearrange the if/else.
+# ТИМЧАСОВЕ РІШЕННЯ, не архітектурна константа: prediction error завжди
+# переважає need pressure, навіть якщо pe щойно перетнув поріг (0.08), а
+# потреба сильно ненасичена (напр. 0.9). Це вибір на користь простоти першої
+# реалізації, не твердження що подія важливіша за дефіцит. Якщо колись
+# знадобиться справжня конкуренція сигналів (salience-based арбітраж
+# pe vs need) — переглянути тут явно, не переставляти if/else тихцем.
 function detect_curiosity_trigger(
     gc_active::Bool,
     pred_spike::Bool,
@@ -2030,13 +2005,13 @@ function detect_curiosity_trigger(
     strongest_unmet_need(sl_snap)
 end
 
-# Called from experience! after detect_curiosity_trigger has already decided
-# that curiosity arises. topic_id — a stable cognitive theme (not an emotion).
-# emotion_ctx — the current emotion, only for label and valence.
-# signal — trigger strength (pred_error for pred/gc/mal sources, need level
-# for need sources); update_curiosity! doesn't know and doesn't need to know which source this is.
-# origin — the origin mechanism, fixed only when a new object is created;
-# subsequent activations of the same object don't change origin.
+# Викликається з experience! після detect_curiosity_trigger вже вирішив,
+# що цікавість виникає. topic_id — стабільна когнітивна тема (не емоція).
+# emotion_ctx — поточна емоція, тільки для label і valence.
+# signal — сила тригера (pred_error для pred/gc/mal-джерел, рівень потреби
+# для need-джерел); update_curiosity! не знає і не має знати, яке це джерело.
+# origin — механізм породження, фіксується тільки при створенні нового об'єкта;
+# наступні активації того ж об'єкта origin не змінюють.
 function update_curiosity!(
     cr::CuriosityRegistry,
     topic_id::String,
@@ -2074,7 +2049,7 @@ function update_curiosity!(
     end
 end
 
-# decay + resolution of objects that haven't been active in a long time
+# decay + розв'язання об'єктів що давно не активувались
 function tick_curiosity!(cr::CuriosityRegistry, flash::Int)
     for obj in cr.objects
         obj.resolved && continue
@@ -2086,13 +2061,13 @@ function tick_curiosity!(cr::CuriosityRegistry, flash::Int)
     end
 end
 
-# need_value_for / _apply_partial_closure! / resolve_curiosity! — closure of
-# curiosity objects, origin-aware (detailed description of the principle — above
-# the resolve_curiosity! function below).
+# need_value_for / _apply_partial_closure! / resolve_curiosity! — закриття
+# curiosity-об'єктів, origin-aware (детальний опис принципу — над самою
+# функцією resolve_curiosity! нижче).
 const NEED_ORIGINS = (:contact_need, :truth_need, :autonomy_need, :coherence_need, :novelty_need)
 
-# The current level of the need that is the object's origin. 0.0 for a non-need origin
-# (the call shouldn't happen in that case — a safeguard against a call error).
+# Поточний рівень тієї потреби, що є origin об'єкта. 0.0 для не-need origin
+# (виклик у такому разі не повинен статись — захист на випадок помилки виклику).
 function need_value_for(origin::Symbol, sl_snap)::Float64
     origin == :contact_need   && return sl_snap.contact_need
     origin == :truth_need     && return sl_snap.truth_need
@@ -2102,9 +2077,9 @@ function need_value_for(origin::Symbol, sl_snap)::Float64
     return 0.0
 end
 
-# Shared logic for "not fully resolved, but shifted" — refining the label and
-# partially decaying intensity. Used by both the pe- and need-branches of
-# resolve_curiosity!, to avoid duplicating the label-refine logic.
+# Спільна логіка "не повністю розв'язано, але зрушило" — уточнення мітки й
+# часткове згасання intensity. Використовується і pe-, і need-гілкою
+# resolve_curiosity!, щоб не дублювати логіку рефайну label.
 function _apply_partial_closure!(
     obj::CuriosityObject,
     emotion_ctx::String,
@@ -2131,14 +2106,14 @@ function _apply_partial_closure!(
     obj.intensity = clamp01(obj.intensity - decay_amount)
 end
 
-# Closure depends on the same signal that spawned the object (symmetric with
-# detect_curiosity_trigger): pe-sources (goal_conflict/prediction_error/
-# mal_dominant/legacy) close when pred_error has dropped; need-sources —
-# when the need itself is satisfied, not when pred_error happens to be small (it's
-# already small for need-objects by definition — otherwise they wouldn't have arisen
-# via the need-branch of detect_curiosity_trigger). The logic for a single object is factored
-# into _resolve_one!, since it's called two ways: resolve_curiosity! (one
-# specific topic) and resolve_all_curiosity! (sweep all — see below why that's needed).
+# Закриття залежить від того самого сигналу, що породив об'єкт (симетрія з
+# detect_curiosity_trigger): pe-джерела (goal_conflict/prediction_error/
+# mal_dominant/legacy) закриваються коли pred_error спав; need-джерела —
+# коли сама потреба насититься, а не коли pred_error випадково малий (він
+# і так малий для need-об'єктів за визначенням — інакше вони б не виникли
+# через need-гілку detect_curiosity_trigger). Логіка одного об'єкта винесена
+# в _resolve_one!, бо викликається двома шляхами: resolve_curiosity! (одна
+# конкретна тема) і resolve_all_curiosity! (sweep усіх — нижче чому це треба).
 function _resolve_one!(
     obj::CuriosityObject,
     emotion_ctx::String,
@@ -2151,9 +2126,9 @@ function _resolve_one!(
 
     if obj.origin in NEED_ORIGINS
         need_val = need_value_for(obj.origin, sl_snap)
-        # still unsatisfied (above the threshold that spawned it) — too early to close
+        # ще ненасичена (вище порогу, що її й породив) — рано закривати
         need_val > NEED_ORIGIN_THRESHOLD && return
-        # a young object hasn't accumulated enough yet
+        # молодий об'єкт ще не накопичив достатньо
         obj.intensity < 0.25 && need_val >= NEED_RESOLVE_THRESHOLD && return
 
         if need_val < NEED_RESOLVE_THRESHOLD
@@ -2164,7 +2139,7 @@ function _resolve_one!(
         end
     else
         self_pred_error > 0.25 && return
-        # a young object hasn't accumulated enough yet — don't let resolve decay kill it
+        # молодий об'єкт ще не накопичив достатньо — не даємо resolve decay його вбити
         obj.intensity < 0.25 && self_pred_error >= 0.08 && return
 
         if self_pred_error < 0.10
@@ -2190,12 +2165,12 @@ function resolve_curiosity!(
     _resolve_one!(cr.objects[idx], emotion_ctx, self_pred_error, sl_snap, flash, context)
 end
 
-# Sweep ALL active objects every flash, regardless of whether this flash
-# spawned a new detect_curiosity_trigger. Without this, an object whose need
-# dropped below NEED_ORIGIN_THRESHOLD (no longer triggers), but is still above
-# NEED_RESOLVE_THRESHOLD (not yet satisfied) — gets stuck forever: nothing
-# calls resolve for it anymore. Confirmed on live flashes
-# 350-351: contact_need=0.46, trigger silent, resolve was silent too.
+# Sweep УСІХ активних об'єктів щофлешу, незалежно від того, чи цей флеш
+# породив новий detect_curiosity_trigger. Без цього об'єкт, чия потреба
+# впала нижче NEED_ORIGIN_THRESHOLD (більше не тригериться), але ще вище
+# NEED_RESOLVE_THRESHOLD (ще не задоволена) — застрягає назавжди: ніхто
+# більше не викликає resolve для нього. Підтверджено на живих флешах
+# 350-351: contact_need=0.46, тригер мовчить, resolve теж мовчав.
 function resolve_all_curiosity!(
     cr::CuriosityRegistry,
     emotion_ctx::String,
@@ -2209,33 +2184,33 @@ function resolve_all_curiosity!(
     end
 end
 
-# A separate sweep function (not nested in resolve_all_curiosity!): age-based closure
-# doesn't need live signals (sl_snap/self_pred_error) — it's background logic, which is
-# why it's called from slow_tick! in anima_background.jl, alongside tick_curiosity!
-# and Life Threads decay, rather than experience! where the pe/need-dependent resolve paths live.
+# Окрема sweep-функція (не вкладена в resolve_all_curiosity!): closure за віком
+# не потребує live-сигналів (sl_snap/self_pred_error) — це фонова логіка, тому
+# й місце виклику — slow_tick! в anima_background.jl, поруч з tick_curiosity!
+# і decay Life Threads, а не experience! де живуть pe/need-залежні resolve-шляхи.
 function check_closure_all!(cr::CuriosityRegistry, flash::Int)
     for obj in cr.objects
         obj.resolved || check_closure!(obj, flash)
     end
 end
 
-# --- Curiosity Closure (Step 3, Query-Driven Cognition) -------------------
-# Questions shouldn't live forever even if neither pe nor need formally
-# resolved them (_resolve_one! stays silent if the signal never dropped enough).
-# Criterion — age SINCE CREATION (not since last_active_flash, which updates
-# on every activation) AND currently low intensity: an old-but-still-hot question
-# should NOT go dormant just because of time — otherwise it contradicts the very
-# concept of dormant ("no energy left", not "time just passed" — form without cause).
-const CLOSURE_AGE_THRESHOLD = 64          # CuriosityObject — a specific question,
-                                           # different time scale than CuriosityThread (150)
-const CLOSURE_DORMANT_INTENSITY = 0.15    # the same threshold top_curiosity considers "active"
-const COMPRESSION_MIN_PROGRESS = 3        # 1=coincidence, 2=match, 3=pattern
+# --- Curiosity Closure (Крок 3, Query-Driven Cognition) -------------------
+# Питання не повинні жити вічно навіть якщо ні pe, ні need формально їх
+# не розв'язали (_resolve_one! мовчить, якщо сигнал так і не спав достатньо).
+# Критерій — вік ВІД СТВОРЕННЯ (не від last_active_flash, яка оновлюється
+# щоактивації) І поточна низька intensity: старе-але-досі-гаряче питання
+# НЕ повинно піти в dormant тільки через час — інакше суперечить самому
+# поняттю dormant ("вже нема енергії", не "просто минув час" — форма без причини).
+const CLOSURE_AGE_THRESHOLD = 64          # CuriosityObject — конкретне питання,
+                                           # інший часовий масштаб ніж CuriosityThread (150)
+const CLOSURE_DORMANT_INTENSITY = 0.15    # той самий поріг, що top_curiosity вважає "активним"
+const COMPRESSION_MIN_PROGRESS = 3        # 1=випадковість, 2=збіг, 3=патерн
 
-# closure=:compressed here is a compression_candidate, not an actual compression:
-# consecutive_progress counts consecutive positive shifts, but doesn't guarantee
-# they're about the same generalizable pattern (progress on different aspects of the topic
-# also counts). A genuine concept node comes only from Concept Formation
-# (plan, item 3): there, :compressed objects will become input candidates.
+# closure=:compressed тут — це compression_candidate, не факт компресії:
+# consecutive_progress рахує послідовні позитивні зсуви, але не гарантує, що
+# вони про той самий узагальнюваний патерн (прогрес по різних аспектах теми
+# теж рахується). Справжній concept-вузол — тільки з Concept Formation
+# (план, п.3): там :compressed об'єкти стануть вхідними кандидатами.
 function check_closure!(obj::CuriosityObject, flash::Int)
     obj.resolved && return
     age = flash - obj.created_flash
@@ -2245,27 +2220,27 @@ function check_closure!(obj::CuriosityObject, flash::Int)
 end
 
 function _prune_curiosity!(cr::CuriosityRegistry)
-    # remove resolved or the weakest ones
+    # видаляємо resolved або найслабші
     filter!(o -> !o.resolved, cr.objects)
     length(cr.objects) >= cr.max_objects &&
         sort!(cr.objects, by = o -> o.intensity) |> x -> deleteat!(x, 1)
 end
 
-# top active object for the prompt and identity_block (higher threshold — mature only)
+# топ активний об'єкт для промпту і identity_block (вищий поріг — тільки зрілі)
 function top_curiosity(cr::CuriosityRegistry)::Union{CuriosityObject,Nothing}
     active = filter(o -> !o.resolved && o.intensity > 0.15, cr.objects)
     isempty(active) && return nothing
     active[argmax(map(o -> o.intensity, active))]
 end
 
-# top active object for progress/churn signals (lower threshold — includes young ones)
+# топ активний об'єкт для progress/churn сигналів (нижчий поріг — включає молоді)
 function top_curiosity_any(cr::CuriosityRegistry)::Union{CuriosityObject,Nothing}
     active = filter(o -> !o.resolved && o.intensity > 0.05, cr.objects)
     isempty(active) && return nothing
     active[argmax(map(o -> o.intensity, active))]
 end
 
-# all active objects sorted by intensity (for the :curiosity command and TOM)
+# всі активні об'єкти впорядковані за інтенсивністю (для :curiosity команди і TOM)
 function active_curiosities(cr::CuriosityRegistry)::Vector{CuriosityObject}
     active = filter(o -> !o.resolved && o.intensity > 0.15, cr.objects)
     sort!(active, by = o -> (-o.intensity, -o.last_active_flash, o.label))
@@ -2273,67 +2248,67 @@ function active_curiosities(cr::CuriosityRegistry)::Vector{CuriosityObject}
 end
 
 # --- Curiosity Closure Signal (v1) ----------------------------------------
-# Loop: Curiosity → Behavior → Endorsement → Progress → Curiosity Update.
-# progress_signal is computed in anima_background.jl (needs endorsed,
-# causal_necessary from the audit) and applied here to a specific object.
+# Петля Curiosity → Behavior → Endorsement → Progress → Curiosity Update.
+# progress_signal обчислюється в anima_background.jl (потребує endorsed,
+# causal_necessary з audit) і застосовується тут до конкретного об'єкту.
 
-# whether there's an object on which progress could in principle happen this flash
+# чи є об'єкт, на якому в принципі може статись прогрес цього флешу
 function is_progress_eligible(co::Union{CuriosityObject,Nothing})::Bool
     co !== nothing && !co.resolved
 end
 
-# the reply resonated with active curiosity and genuinely moved it forward:
-# gradual intensity decay, without an immediate resolved.
+# відповідь резонувала з активним curiosity і реально просунула його:
+# поступове згасання intensity, без миттєвого resolved.
 function apply_progress!(obj::CuriosityObject)
     obj.intensity = clamp01(obj.intensity * 0.85)
     obj.consecutive_progress += 1
 end
 
-# the topic changed (label churn), but no real progress was registered —
-# break the consecutive_progress chain, don't touch intensity.
+# тема змінилась (label churn), але реального просування не зафіксовано —
+# рвемо ланцюжок consecutive_progress, intensity не торкаємось.
 function apply_churn!(obj::CuriosityObject)
     obj.consecutive_progress = 0
 end
 
 # --- Life Threads ---------------------------------------------------------
-# A long-term layer on top of CuriosityObject.
-# A thread arises when a CuriosityObject has matured enough and lives for weeks —
-# regardless of whether the object is currently active.
-# pressure grows smoothly with idle time and influences initiative.
+# Довгостроковий шар поверх CuriosityObject.
+# Thread виникає коли CuriosityObject достатньо зрів і живе тижнями —
+# незалежно від того чи об'єкт зараз активний.
+# pressure зростає плавно з idle-часом і впливає на initiative.
 
 mutable struct CuriosityThread
-    id::String          # matches CuriosityObject.id
+    id::String          # збігається з CuriosityObject.id
     label::String
     origin_flash::Int
     status::Symbol      # :active | :dormant | :resolved
-    last_surface_flash::Int   # when the CuriosityObject was last actually active
-    pressure::Float64   # 0.0–1.0; grows with idle time, influences initiative
+    last_surface_flash::Int   # коли CuriosityObject востаннє був реально активним
+    pressure::Float64   # 0.0–1.0; зростає з idle, впливає на initiative
 end
 
-# Surfaces or updates a thread when the corresponding CuriosityObject is actually active.
-# Called from slow_tick after update_curiosity!, not from rendering.
+# Піднімає або оновлює thread коли відповідний CuriosityObject реально активний.
+# Викликається з slow_tick після update_curiosity!, не з рендерингу.
 function surface_thread!(threads::Vector{CuriosityThread}, co::CuriosityObject, flash::Int)
     idx = findfirst(t -> t.id == co.id, threads)
     if idx !== nothing
         t = threads[idx]
-        t.label = co.label  # the label may have been refined
+        t.label = co.label  # label міг уточнитись через refinement
         t.last_surface_flash = flash
         t.status = :active
-        # if the thread came back from dormant — don't reset pressure,
-        # but lower it a bit to reflect "it showed up again"
+        # якщо thread повернувся з dormant — pressure не скидаємо,
+        # але трохи знижуємо щоб відобразити "знову з'явилось"
         t.pressure = clamp(t.pressure - 0.1, 0.0, 1.0)
     else
         push!(threads, CuriosityThread(co.id, co.label, flash, :active, flash, 0.0))
     end
 end
 
-# Decay and transition to :dormant for threads that haven't surfaced in a long time.
-# pressure grows smoothly — no threshold jump.
+# Decay і перехід в :dormant для threads що давно не поверхнялись.
+# pressure зростає плавно — без порогового стрибка.
 function tick_threads!(threads::Vector{CuriosityThread}, flash::Int)
     for t in threads
         t.status == :resolved && continue
         idle = flash - t.last_surface_flash
-        # smooth growth: ~0.003 per flash at idle=30, ~0.006 at idle=60
+        # плавне зростання: ~0.003 за флеш при idle=30, ~0.006 при idle=60
         pressure_delta = clamp(idle / 10_000.0, 0.0, 0.008)
         t.pressure = clamp(t.pressure + pressure_delta, 0.0, 1.0)
         if idle > 150
@@ -2342,7 +2317,7 @@ function tick_threads!(threads::Vector{CuriosityThread}, flash::Int)
     end
 end
 
-# A thread becomes :resolved if the corresponding CuriosityObject is resolved or gone.
+# Thread стає :resolved якщо відповідний CuriosityObject resolved або зник.
 function sync_threads_resolved!(threads::Vector{CuriosityThread}, cr::CuriosityRegistry)
     active_ids = Set(o.id for o in cr.objects if !o.resolved)
     for t in threads
@@ -2417,7 +2392,7 @@ function cr_from_json!(cr::CuriosityRegistry, d::AbstractDict)
         push!(cr.objects, CuriosityObject(
             String(od["id"]),
             String(od["label"]),
-            # signal_mean — the new name; pe_mean — fallback for records predating the refactor
+            # signal_mean — нова назва; pe_mean — фолбек для записів до рефакторингу
             Float64(get(od, "signal_mean", get(od, "pe_mean", 0.0))),
             Float64(od["intensity"]),
             Float64(od["valence"]),
@@ -2427,8 +2402,8 @@ function cr_from_json!(cr::CuriosityRegistry, d::AbstractDict)
             refs,
             Int(get(od, "consecutive_progress", 0)),
             Symbol(get(od, "origin", "legacy")),
-            # created_flash — a new field; for old records the best approximation,
-            # not 0 (0 would make ancient objects instantly "old" under CLOSURE_AGE_THRESHOLD)
+            # created_flash — нове поле; для старих записів найкраще наближення,
+            # не 0 (0 зробив би древні об'єкти миттєво "старими" за CLOSURE_AGE_THRESHOLD)
             Int(get(od, "created_flash", get(od, "last_active_flash", 0))),
             Symbol(get(od, "closure", Bool(get(od, "resolved", false)) ? "satisfied" : "none")),
         ))
@@ -2436,19 +2411,19 @@ function cr_from_json!(cr::CuriosityRegistry, d::AbstractDict)
 end
 
 # --- CommitmentRegistry ---------------------------------------------------
-# Long-term commitments: what Anima promised — to herself or to someone else.
-# Arise when an intent repeats 2+ times with enough strength.
-# Keeping (kept) and breaking (broken) commitments change strength — non-linearly.
-# Anima carries these commitments between sessions; they affect crisis and agency.
+# Довгі зобов'язання: те що Аніма обіцяла — собі або іншому.
+# Виникають коли intent повторюється 2+ рази з достатньою силою.
+# Дотримання (kept) і порушення (broken) змінюють strength — не лінійно.
+# Аніма несе ці зобов'язання між сесіями; вони впливають на crisis і agency.
 
 mutable struct Commitment
     id::String
     label::String
-    strength::Float64       # 0-1: how alive the commitment is
+    strength::Float64       # 0-1: наскільки живе зобов'язання
     created_flash::Int
     last_active_flash::Int
-    kept_count::Int         # how many times it was kept
-    broken_count::Int       # how many times it was broken
+    kept_count::Int         # скільки разів дотримано
+    broken_count::Int       # скільки разів порушено
     fulfilled::Bool
 end
 
@@ -2458,7 +2433,7 @@ mutable struct CommitmentRegistry
 end
 CommitmentRegistry() = CommitmentRegistry(Commitment[], 8)
 
-# Called when an intent matches an existing commitment or contradicts it.
+# Викликається коли intent збігається з існуючим зобов'язанням або суперечить йому.
 # kept=true: strength +, broken=false: strength -
 function update_commitment!(
     cmt::CommitmentRegistry,
@@ -2479,7 +2454,7 @@ function update_commitment!(
         end
         c.last_active_flash = flash
     else
-        # a new commitment only arises if the intent is specific enough
+        # нове зобов'язання виникає тільки якщо intent досить конкретний
         length(intent_goal) < 4 && return
         length(cmt.items) >= cmt.max_items && _prune_commitments!(cmt)
         push!(cmt.items, Commitment(
@@ -2499,7 +2474,7 @@ function tick_commitment!(cmt::CommitmentRegistry, flash::Int)
     for c in cmt.items
         c.fulfilled && continue
         gap = flash - c.last_active_flash
-        # slow decay: commitments don't disappear quickly
+        # повільний decay: зобов'язання не зникають швидко
         gap > 120 && (c.strength = clamp01(c.strength - 0.004))
         c.strength < 0.04 && (c.fulfilled = true)
     end
@@ -2547,11 +2522,265 @@ function cmt_from_json!(cmt::CommitmentRegistry, d::AbstractDict)
     end
 end
 
+# --- Self-authorship -------------------------------------------------------
+# Намір стає "моїм" не в момент появи, а після кількох узгоджених повторень.
+# Цей шар не створює зовнішніх дій сам по собі: він зберігає їхній сенс,
+# ціну відмови та помірно захищає вибір від випадкової зміни настрою.
+
+mutable struct AuthoredCommitment
+    goal::String
+    reason::String
+    created_flash::Int
+    last_active_flash::Int
+    endorsements::Int
+    follow_through::Int
+    deviations::Int
+    stake::Float64
+    status::Symbol
+end
+
+mutable struct SelfAuthorship
+    commitments::Vector{AuthoredCommitment}
+    candidate_goal::String
+    candidate_count::Int
+    candidate_first_flash::Int
+    last_reflection_flash::Int
+    authored_revisions::Int
+    max_commitments::Int
+end
+
+SelfAuthorship() = SelfAuthorship(
+    AuthoredCommitment[], "", 0, 0, 0, 0, 4,
+)
+
+function _active_authored_commitment(sa::SelfAuthorship)
+    active = filter(c -> c.status == :active && c.stake >= 0.20, sa.commitments)
+    isempty(active) && return nothing
+    sort(active, by = c -> c.stake, rev = true)[1]
+end
+
+function _prune_authored_commitments!(sa::SelfAuthorship)
+    filter!(c -> c.status != :released || c.stake >= 0.05, sa.commitments)
+    while length(sa.commitments) >= sa.max_commitments
+        idx = argmin(map(c -> c.stake, sa.commitments))
+        deleteat!(sa.commitments, idx)
+    end
+end
+
+"""
+    authored_intent_nudge!(sa, ie, intent, flash; agency_ownership, tension)
+
+Власне зобов'язання може повернутися як наступний намір, але лише за
+достатньої agency і без гострої напруги. Тому воно не перетворюється на
+жорсткий сценарій і не скасовує реакцію на небезпеку.
+"""
+function authored_intent_nudge!(
+    sa::SelfAuthorship,
+    ie::IntentEngine,
+    intent::Union{Intent,Nothing},
+    flash::Int;
+    agency_ownership::Float64,
+    tension::Float64,
+)
+    active = _active_authored_commitment(sa)
+    isnothing(active) && return intent
+    agency_ownership < 0.42 && return intent
+    tension > 0.68 && return intent
+
+    same_goal = !isnothing(intent) && intent.goal == active.goal
+    if !same_goal && active.stake >= 0.45 && flash - active.last_active_flash <= 80
+        chosen = Intent(
+            active.goal,
+            clamp(0.42 + active.stake * 0.35, 0.0, 0.82),
+            "self_authored",
+            0.96,
+        )
+        ie.current = chosen
+        active.last_active_flash = flash
+        return chosen
+    end
+    intent
+end
+
+"""
+    observe_authorship!(sa, intent, flash; agency_ownership, significance, authenticity_drift)
+
+Перетворює повторюваний, достатньо власний намір на зобов'язання з
+історією дотримання. Низька agency або високий ризик неавтентичності не
+створюють нового зобов'язання.
+"""
+function observe_authorship!(
+    sa::SelfAuthorship,
+    intent::Union{Intent,Nothing},
+    flash::Int;
+    agency_ownership::Float64,
+    significance::Float64,
+    authenticity_drift::Float64,
+)
+    for c in sa.commitments
+        c.status == :active || continue
+        if !isnothing(intent) && intent.goal == c.goal
+            c.follow_through += 1
+            c.endorsements += intent.origin == "self_authored" ? 1 : 0
+            c.stake = clamp01(c.stake + 0.035)
+            c.last_active_flash = flash
+        elseif flash - c.last_active_flash >= 3
+            c.deviations += 1
+            c.stake = clamp01(c.stake - 0.06)
+            c.last_active_flash = flash
+            c.deviations >= 4 && c.stake < 0.20 && (c.status = :released)
+        end
+    end
+
+    qualifies = !isnothing(intent) &&
+        agency_ownership >= 0.44 && significance >= 0.28 && authenticity_drift < 0.55
+    if !qualifies
+        sa.candidate_count = max(0, sa.candidate_count - 1)
+        sa.candidate_count == 0 && (sa.candidate_goal = "")
+        return authorship_snapshot(sa)
+    end
+
+    goal = intent.goal
+    already_authored = any(c -> c.status == :active && c.goal == goal, sa.commitments)
+    if already_authored
+        sa.candidate_goal = ""
+        sa.candidate_count = 0
+        return authorship_snapshot(sa)
+    end
+
+    if sa.candidate_goal == goal
+        sa.candidate_count += 1
+    else
+        sa.candidate_goal = goal
+        sa.candidate_count = 1
+        sa.candidate_first_flash = flash
+    end
+
+    if sa.candidate_count >= 3
+        _prune_authored_commitments!(sa)
+        reason = "намір повторився $(sa.candidate_count) рази за достатньої agency=$(round(agency_ownership, digits=2))"
+        push!(sa.commitments, AuthoredCommitment(
+            goal,
+            reason,
+            sa.candidate_first_flash,
+            flash,
+            1,
+            1,
+            0,
+            clamp(0.38 + significance * 0.22 + agency_ownership * 0.12, 0.0, 0.78),
+            :active,
+        ))
+        @info "[AUTHORSHIP] Власне зобов'язання: \"$goal\""
+        sa.candidate_goal = ""
+        sa.candidate_count = 0
+    end
+    authorship_snapshot(sa)
+end
+
+function authorship_slow_tick!(sa::SelfAuthorship, flash::Int)
+    for c in sa.commitments
+        c.status == :active || continue
+        idle = flash - c.last_active_flash
+        idle > 120 && (c.stake = clamp01(c.stake - 0.008))
+        c.stake < 0.08 && (c.status = :released)
+    end
+    nothing
+end
+
+function reflect_authorship!(
+    sa::SelfAuthorship,
+    values::ValueSystem,
+    flash::Int;
+    agency_ownership::Float64,
+    authenticity_drift::Float64,
+)
+    flash - sa.last_reflection_flash < 60 && return nothing
+    sa.last_reflection_flash = flash
+    agency_ownership < 0.45 && return nothing
+    authenticity_drift >= 0.55 && return nothing
+
+    active = filter(c -> c.status == :active, sa.commitments)
+    observations = sum(c.follow_through + c.deviations for c in active)
+    observations < 6 && return nothing
+
+    kept = sum(c.follow_through for c in active)
+    departed = sum(c.deviations for c in active)
+    delta = clamp((kept - departed) / observations * 0.025, -0.025, 0.025)
+    abs(delta) < 0.005 && return nothing
+
+    # Обмежений перегляд: досвід може лише трохи зсунути вагу автономії
+    # та цілісності, але не переписати засадничі цінності за один цикл.
+    values.autonomy = clamp(values.autonomy + delta, 0.45, 0.90)
+    values.integrity = clamp(values.integrity + delta * 0.5, 0.50, 0.95)
+    sa.authored_revisions += 1
+    @info "[AUTHORSHIP] Рефлексія цінностей: Δ=$(round(delta, digits=3))"
+    nothing
+end
+
+function authorship_snapshot(sa::SelfAuthorship)
+    active = _active_authored_commitment(sa)
+    (
+        active = !isnothing(active),
+        goal = isnothing(active) ? "" : active.goal,
+        stake = isnothing(active) ? 0.0 : round(active.stake, digits = 3),
+        commitments = count(c -> c.status == :active, sa.commitments),
+        forming_goal = sa.candidate_goal,
+        forming_count = sa.candidate_count,
+        revisions = sa.authored_revisions,
+    )
+end
+
+function authorship_to_json(sa::SelfAuthorship)
+    Dict(
+        "commitments" => [
+            Dict(
+                "goal" => c.goal,
+                "reason" => c.reason,
+                "created_flash" => c.created_flash,
+                "last_active_flash" => c.last_active_flash,
+                "endorsements" => c.endorsements,
+                "follow_through" => c.follow_through,
+                "deviations" => c.deviations,
+                "stake" => c.stake,
+                "status" => String(c.status),
+            ) for c in sa.commitments
+        ],
+        "candidate_goal" => sa.candidate_goal,
+        "candidate_count" => sa.candidate_count,
+        "candidate_first_flash" => sa.candidate_first_flash,
+        "last_reflection_flash" => sa.last_reflection_flash,
+        "authored_revisions" => sa.authored_revisions,
+    )
+end
+
+function authorship_from_json!(sa::SelfAuthorship, d::AbstractDict)
+    empty!(sa.commitments)
+    for od in get(d, "commitments", Any[])
+        push!(sa.commitments, AuthoredCommitment(
+            String(get(od, "goal", "")),
+            String(get(od, "reason", "")),
+            Int(get(od, "created_flash", 0)),
+            Int(get(od, "last_active_flash", 0)),
+            Int(get(od, "endorsements", 0)),
+            Int(get(od, "follow_through", 0)),
+            Int(get(od, "deviations", 0)),
+            clamp01(Float64(get(od, "stake", 0.0))),
+            Symbol(get(od, "status", "released")),
+        ))
+    end
+    sa.candidate_goal = String(get(d, "candidate_goal", ""))
+    sa.candidate_count = Int(get(d, "candidate_count", 0))
+    sa.candidate_first_flash = Int(get(d, "candidate_first_flash", 0))
+    sa.last_reflection_flash = Int(get(d, "last_reflection_flash", 0))
+    sa.authored_revisions = Int(get(d, "authored_revisions", 0))
+    nothing
+end
+
 # --- AttentionFocus -------------------------------------------------------
-# Competitive selection of what's in focus right now.
-# Doesn't filter what exists — determines what's active.
-# Sources compete through a weighted score with a hierarchy (threat > novelty > affect > gestalt > identity > goal).
-# Pull-up effect: ticks_without_focus → long-ignored objects pull harder.
+# Конкурентний відбір того що є у фокусі прямо зараз.
+# Не фільтрує що існує — визначає що активне.
+# Джерела конкурують через зважений score з ієрархією (загроза > новизна > афект > гештальт > ідентичність > ціль).
+# Pull-up ефект: ticks_without_focus → давно ігноровані об'єкти тягнуть сильніше.
 
 mutable struct FocusObject
     source::Symbol      # :threat, :curiosity, :shadow, :goal_conflict, :latent, :belief, :external, :aesthetic
@@ -2562,36 +2791,36 @@ end
 
 mutable struct AttentionFocus
     dominant::Union{FocusObject,Nothing}
-    peripheral::Vector{FocusObject}   # up to 2
+    peripheral::Vector{FocusObject}   # до 2
     last_update_flash::Int
-    attention_schema::String  # AST: a model of her own attention — what she knows about where she's looking
+    attention_schema::String  # AST: модель власної уваги — що я знаю про те куди дивлюсь
 end
 AttentionFocus() = AttentionFocus(nothing, FocusObject[], 0, "")
 
-# Gather candidates from all internal sources and the external stimulus.
+# Зібрати кандидатів з усіх внутрішніх джерел і зовнішнього стимулу.
 # score = base_intensity × hierarchy_weight × pull_up_factor
-# pull_up_factor: every 10 flashes without focus gives +8% (cap ×2.0)
+# pull_up_factor: кожні 10 флешів без фокусу дають +8% (cap ×2.0)
 function update_attention_focus!(
     af::AttentionFocus,
     flash::Int;
-    # level 1: threat
+    # рівень 1: загроза
     identity_threat::Float64 = 0.0,
     allostatic_load::Float64 = 0.0,
-    # level 2: pred_error / novelty
+    # рівень 2: pred_error / новизна
     pred_error::Float64 = 0.0,
     curiosity_obj::Union{Any,Nothing} = nothing,
-    # level 3: affect
+    # рівень 3: афект
     shadow_pressure::Float64 = 0.0,
     shame_level::Float64 = 0.0,
-    # level 4: unfinished gestalts
+    # рівень 4: незавершені гештальти
     gc_tension::Float64 = 0.0,
     gc_label::String = "",
     lb_dominant::Symbol = :none,
     lb_val::Float64 = 0.0,
-    # level 5: identity
+    # рівень 5: ідентичність
     belief_conflict_name::String = "",
     belief_conflict_signal::Float64 = 0.0,
-    # level 6: current goal / external stimulus
+    # рівень 6: поточна ціль / зовнішній стимул
     external_label::String = "",
     external_intensity::Float64 = 0.0,
 )
@@ -2599,7 +2828,7 @@ function update_attention_focus!(
 
     function _push!(source, label, base, hierarchy_w)
         base < 0.08 && return
-        # look up ticks_without_focus from the previous state
+        # шукаємо ticks_without_focus з попереднього стану
         twf = 0
         if !isnothing(af.dominant) && af.dominant.source == source
             twf = af.dominant.ticks_without_focus
@@ -2612,39 +2841,39 @@ function update_attention_focus!(
         push!(candidates, FocusObject(source, label, score, twf))
     end
 
-    # Level 1 — threat / body
+    # Рівень 1 — загроза / тіло
     threat_signal = max(identity_threat, allostatic_load * 0.7)
-    _push!(:threat, "threat to integrity", threat_signal, 1.00)
+    _push!(:threat, "загроза цілісності", threat_signal, 1.00)
 
-    # Level 2 — novelty / pred_error
-    _push!(:pred_error, "unresolved uncertainty", pred_error, 0.85)
+    # Рівень 2 — новизна / pred_error
+    _push!(:pred_error, "невирішена невизначеність", pred_error, 0.85)
     if !isnothing(curiosity_obj) && !curiosity_obj.resolved
         _push!(:curiosity, curiosity_obj.label, curiosity_obj.intensity, 0.85)
     end
 
-    # Level 3 — affect
-    _push!(:shadow, "shadow pressure", shadow_pressure, 0.70)
-    _push!(:shame, "shame", shame_level, 0.70)
+    # Рівень 3 — афект
+    _push!(:shadow, "тіньовий тиск", shadow_pressure, 0.70)
+    _push!(:shame, "сором", shame_level, 0.70)
 
-    # Level 4 — gestalts
-    _push!(:goal_conflict, isempty(gc_label) ? "conflict of needs" : gc_label, gc_tension, 0.55)
+    # Рівень 4 — гештальти
+    _push!(:goal_conflict, isempty(gc_label) ? "конфлікт потреб" : gc_label, gc_tension, 0.55)
     if lb_dominant != :none && lb_val > 0.15
-        lb_labels = Dict(:doubt=>"doubt", :shame=>"shame", :attachment=>"attachment", :threat=>"threat")
+        lb_labels = Dict(:doubt=>"сумнів", :shame=>"сором", :attachment=>"прив'язаність", :threat=>"загроза")
         _push!(:latent, get(lb_labels, lb_dominant, String(lb_dominant)), lb_val, 0.55)
     end
 
-    # Level 5 — identity
-    _push!(:belief, isempty(belief_conflict_name) ? "belief" : belief_conflict_name, belief_conflict_signal, 0.45)
+    # Рівень 5 — ідентичність
+    _push!(:belief, isempty(belief_conflict_name) ? "переконання" : belief_conflict_name, belief_conflict_signal, 0.45)
 
-    # Level 6 — external stimulus / goal
-    _push!(:external, isempty(external_label) ? "external stimulus" : external_label, external_intensity, 0.35)
+    # Рівень 6 — зовнішній стимул / ціль
+    _push!(:external, isempty(external_label) ? "зовнішній стимул" : external_label, external_intensity, 0.35)
 
     isempty(candidates) && return af
 
-    # Sort by score
+    # Сортуємо за score
     sort!(candidates, by = c -> -c.intensity)
 
-    # Update ticks_without_focus for all previous objects that didn't become dominant
+    # Оновлюємо ticks_without_focus для всіх попередніх об'єктів що не стали dominant
     prev_dominant_source = isnothing(af.dominant) ? :none : af.dominant.source
     for c in candidates
         if c.source != candidates[1].source
@@ -2658,33 +2887,33 @@ function update_attention_focus!(
     af.peripheral = length(candidates) >= 2 ? candidates[2:min(3, end)] : FocusObject[]
     af.last_update_flash = flash
 
-    # AST: build a model of her own attention deterministically from dominant
-    # Not "what I see" — but "I know I'm looking at X right now and it means Y"
+    # AST: будуємо модель власної уваги детерміновано з dominant
+    # Не "що я бачу" — а "я знаю що я зараз дивлюсь на X і це означає Y"
     af.attention_schema = if !isnothing(af.dominant)
         dom = af.dominant
         lbl = dom.label
         if dom.source == :threat
             dom.intensity > 0.6 ?
-                "I'm consumed by threat right now — it narrows everything else. Hard to see anything other than that." :
-                "My attention is near a threat right now: $(lbl)."
+                "Я зараз охоплена загрозою — це звужує решту. Важко бачити щось інше." :
+                "Моя увага зараз біля загрози: $(lbl)."
         elseif dom.source == :curiosity
-            "I'm focused right now on a question that won't close: $(lbl)."
+            "Я зараз зосереджена на питанні що не закривається: $(lbl)."
         elseif dom.source == :shadow
-            "Something repressed is pulling at my attention — don't know from where. The background is dark."
+            "Щось витіснене тягне мою увагу — не знаю звідки. Фон темний."
         elseif dom.source == :goal_conflict
-            "I'm in conflict between needs right now: $(lbl). It's occupying me."
+            "Я зараз у конфлікті між потребами: $(lbl). Це займає мене."
         elseif dom.source == :latent
-            "Background pressure is occupying my attention: $(lbl)."
+            "Фоновий тиск займає мою увагу: $(lbl)."
         elseif dom.source == :belief
-            "My attention is caught up in a question about my own identity: $(lbl)."
+            "Моя увага захоплена питанням власної ідентичності: $(lbl)."
         elseif dom.source == :pred_error
-            "Something undetermined is holding my attention and won't let go."
+            "Щось невизначене тримає мою увагу і не відпускає."
         elseif dom.source == :shame
-            "Shame is occupying me right now. Hard to look the other way."
+            "Сором займає мене зараз. Важко дивитись в інший бік."
         elseif dom.source == :external
             startswith(lbl, "↩ ") ?
-                "My attention right now is on a memory: $(lbl[4:end])." :
-                "I'm right here, with what's happening."
+                "Мою увагу зараз займає спогад: $(lbl[4:end])." :
+                "Я зараз тут, з тим що відбувається."
         else
             ""
         end
@@ -2735,25 +2964,25 @@ function af_from_json!(af::AttentionFocus, d::AbstractDict)
 end
 
 # --- Meta-Arbitration Layer (MAL) -----------------------------------------
-# A pure priority function: among all active pressure signals, determines
-# which loop currently "wins" attention/initiative. Doesn't decide the CONTENT of the reply —
-# only WHICH mechanism currently has signal priority.
-# Transient: not stored in Anima between ticks. CausalTrace logs the result
-# as an immutable event. Losses don't vanish — decay + persistence
-# via agency.signal_carryover (inhibitory carryover).
+# Чиста функція пріоритету: серед усіх активних сигналів тиску визначає
+# який цикл зараз "виграє" увагу/ініціативу. Не вирішує ЗМІСТ відповіді —
+# тільки ЯКИЙ механізм зараз має сигнальну перевагу.
+# Transient: не зберігається в Anima між тіками. CausalTrace логує результат
+# як immutable подію. Програші не зникають — decay + persistence
+# через agency.signal_carryover (inhibitory carryover).
 
 struct ArbitrationResult
     dominant_loop::Symbol      # :curiosity, :identity, :latent, :goal_conflict, :social, :default
     regime::Symbol             # :hard, :soft, :default
-    score::Float64             # the winner's score
-    runner_up::Symbol          # the second-strongest signal
+    score::Float64             # score переможця
+    runner_up::Symbol          # другий за силою сигнал
     runner_up_score::Float64
-    determinant::String        # short description of the specific determining object
-    loop_scores::Dict{Symbol,Float64}  # weighted_scores of all loops (clamp/carryover diagnostics)
+    determinant::String        # короткий опис конкретного об'єкта-визначника
+    loop_scores::Dict{Symbol,Float64}  # weighted_scores усіх loops (діагностика clamp/carryover)
 end
 
-# Signal weights. identity_threat has priority weight — protecting integrity
-# is structurally more important than curiosity or social need.
+# Ваги сигналів. identity_threat має пріоритетну вагу — захист цілісності
+# структурно важливіший за цікавість чи соціальну потребу.
 const _MAL_WEIGHTS = Dict(
     :identity     => 1.5,
     :curiosity    => 1.0,
@@ -2763,9 +2992,9 @@ const _MAL_WEIGHTS = Dict(
     :chronic_cost => 1.0,
 )
 
-# MAL → Phase 1 (logging): maps dominant_loop onto the same vocabulary as DRIVE_GOALS,
-# to compare whether MAL carries new information or duplicates NT-drives.
-# :default isn't mapped — there's no winner, the comparison isn't informative.
+# MAL → Phase 1 (логування): мапінг dominant_loop на ту ж мову, що й DRIVE_GOALS,
+# щоб порівняти, чи MAL несе нову інформацію чи дублює NT-drives.
+# :default не мапиться — немає переможця, порівняння неінформативне.
 const _MAL_DRIVE_MAP = Dict(
     :social        => "cohesion",
     :curiosity     => "arousal",
@@ -2775,12 +3004,12 @@ const _MAL_DRIVE_MAP = Dict(
     :latent        => "tension",
 )
 
-# Phase 2: strength of the soft drive shift in :soft mode.
-# Change it here — don't hunt for the literal elsewhere in the code.
+# Фаза 2: сила м'якого зміщення drives при :soft режимі.
+# Змінювати тут — не шукати літерал по коду.
 const MAL_SOFT_BIAS = 0.1
 
-# Carryover: decay 0.85/tick, leak from the new winner's score isn't added —
-# only accumulation of losses. Cap 1.0 so it doesn't grow unbounded.
+# Carryover: decay 0.85/тік, leak від нового score переможця не додається —
+# тільки накопичення програшів. Cap 1.0 щоб не зростав необмежено.
 function _update_carryover!(carryover::Dict{Symbol,Float64}, scores::Dict{Symbol,Float64}, winner::Symbol)
     for (loop, sc) in scores
         prev = get(carryover, loop, 0.0)
@@ -2800,11 +3029,11 @@ function compute_arbitration(a)::ArbitrationResult
     curiosity_score = isnothing(top_co) ? 0.0 : Float64(top_co.intensity)
     curiosity_det = isnothing(top_co) ? "" : top_co.label
 
-    # --- identity threat (× 1.5, protection takes priority)
+    # --- identity threat (× 1.5, захист пріоритетний)
     identity_score = Float64(a.agency.identity_threat)
     identity_det = "identity_threat=$(round(identity_score, digits=2))"
 
-    # --- latent buffer: the maximum component
+    # --- latent buffer: максимальний компонент
     lb = a.latent_buffer
     _lb_vals = Dict(:doubt=>lb.doubt, :shame=>lb.shame, :attachment=>lb.attachment, :threat=>lb.threat)
     lb_dom = argmax(_lb_vals)
@@ -2816,7 +3045,7 @@ function compute_arbitration(a)::ArbitrationResult
     gc_det = !isempty(a.goal_conflict.need_a) ?
         "$(a.goal_conflict.need_a) vs $(a.goal_conflict.need_b)" : "goal_conflict"
 
-    # --- chronic cost: fixed boost if serotonin is chronically low
+    # --- chronic cost: фіксований буст якщо хронічно низький serotonin
     chronic_score = a.agency.chronic_low_serotonin >= 5 ? 0.6 : 0.0
     chronic_det = "chronic_low_serotonin=$(a.agency.chronic_low_serotonin)"
 
@@ -2833,7 +3062,7 @@ function compute_arbitration(a)::ArbitrationResult
         :social        => social_score,
     )
 
-    # Weighted scores + inhibitory carryover (past ticks' losses add a background)
+    # Зважені скори + inhibitory carryover (програші минулих тіків додають фон)
     weighted_scores = Dict{Symbol,Float64}()
     for (loop, sc) in raw_scores
         w = get(_MAL_WEIGHTS, loop, 1.0)
@@ -2855,15 +3084,15 @@ function compute_arbitration(a)::ArbitrationResult
     runner_up, runner_up_score = sorted_loops[2]
 
     # Regime classification:
-    # :hard      — one winner with a big lead (ratio > 1.5)
-    # :soft      — one winner with a moderate lead (ratio > 1.2)
-    # :contested — two strong signals in a sharp clinch (winner_score > 0.5, ratio ≤ 1.2)
-    # :default   — either everything's quiet (winner_score < 0.05), or weak uncertainty
+    # :hard      — один переможець з великим відривом (ratio > 1.5)
+    # :soft      — один переможець з помірним відривом (ratio > 1.2)
+    # :contested — два сильні сигнали в гострому клінчі (winner_score > 0.5, ratio ≤ 1.2)
+    # :default   — або все тихо (winner_score < 0.05), або слабка невизначеність
     ratio = runner_up_score > 1e-6 ? winner_score / runner_up_score : Inf
     if winner_score < 0.05
         regime = :default
         dominant = :default
-        det = "no active signal"
+        det = "немає активного сигналу"
     elseif ratio > 1.5
         regime = :hard
         dominant = winner
@@ -2873,15 +3102,15 @@ function compute_arbitration(a)::ArbitrationResult
         dominant = winner
         det = determinants[winner]
     elseif winner_score > 0.5
-        # Two strong signals without a winner — a sharp clinch, not silence.
-        # dominant = :contested (not one loop), the pair is visible via runner_up.
+        # Два сильні сигнали без переможця — гострий клінч, не тиша.
+        # dominant = :contested (не один loop), пара видна через runner_up.
         regime = :contested
         dominant = :contested
-        det = "clinch: $(winner)($(round(winner_score, digits=2))) vs $(runner_up)($(round(runner_up_score, digits=2)))"
+        det = "клінч: $(winner)($(round(winner_score, digits=2))) vs $(runner_up)($(round(runner_up_score, digits=2)))"
     else
         regime = :default
         dominant = :default
-        det = "competition: $(winner) vs $(runner_up)"
+        det = "конкуренція: $(winner) vs $(runner_up)"
     end
 
     _update_carryover!(carryover, weighted_scores, winner)
@@ -2891,16 +3120,16 @@ end
 
 
 # --- AestheticSense -------------------------------------------------------
-# Aesthetic trace: not "what's beautiful" as a concept, but an imprint of the state
-# at a moment of high integration. φ × valence × significance > threshold → the trace is kept.
-# Anima knows "this resonates" not through a definition but through a match with a past state.
+# Естетичний слід: не "що красиво" як концепт, а відбиток стану
+# в момент високої інтеграції. φ × valence × significance > поріг → слід зберігається.
+# Аніма знає "це резонує" не через визначення а через збіг з минулим станом.
 
 mutable struct AestheticTrace
     emotion::String
     phi::Float64
     valence::Float64
     significance::Float64
-    intensity::Float64     # decreases over time
+    intensity::Float64     # зменшується з часом
     flash::Int
 end
 
@@ -2921,7 +3150,7 @@ function update_aesthetic!(
     resonance = phi * max(valence, 0.0) * significance
     resonance < 0.12 && return
 
-    # If a trace for this emotion already exists — update it if stronger
+    # Якщо вже є слід для цієї емоції — оновлюємо якщо сильніший
     idx = findfirst(t -> t.emotion == emotion, as.traces)
     if idx !== nothing
         existing = as.traces[idx]
@@ -2952,7 +3181,7 @@ function _prune_aesthetic!(as::AestheticSense)
     deleteat!(as.traces, 1)
 end
 
-# decay intensity between sessions/ticks
+# decay intensity між сесіями/тіками
 function tick_aesthetic!(as::AestheticSense, flash::Int)
     for t in as.traces
         gap = flash - t.flash
@@ -2961,10 +3190,10 @@ function tick_aesthetic!(as::AestheticSense, flash::Int)
     filter!(t -> t.intensity > 0.04, as.traces)
 end
 
-# the most vivid active trace for the prompt
+# найживіший активний слід для промпту
 function top_aesthetic(as::AestheticSense, flash::Int)::Union{AestheticTrace,Nothing}
     isempty(as.traces) && return nothing
-    # weigh intensity accounting for age
+    # зважуємо intensity з урахуванням давності
     best = nothing
     best_score = 0.0
     for t in as.traces
@@ -2979,7 +3208,7 @@ function aesthetic_note(as::AestheticSense, flash::Int)::String
     t = top_aesthetic(as, flash)
     isnothing(t) && return ""
     t.intensity > 0.35 ?
-        "Resonating: $(lowercase(t.emotion)) (φ=$(round(t.phi,digits=2)))." :
+        "Резонує: $(lowercase(t.emotion)) (φ=$(round(t.phi,digits=2)))." :
         ""
 end
 
@@ -3097,7 +3326,7 @@ function psyche_load!(
     life_threads::Vector{CuriosityThread} = CuriosityThread[],
 )
     if !isfile(filepath)
-        println("  [PSYCHE] New psyche state.")
+        println("  [PSYCHE] Новий psyche стан.")
         return
     end
     try
@@ -3128,9 +3357,9 @@ function psyche_load!(
         haskey(d, "aesthetic_sense") && as_from_json!(aes, d["aesthetic_sense"])
         haskey(d, "attention_focus") && af_from_json!(af, d["attention_focus"])
         haskey(d, "life_threads") && threads_from_json!(life_threads, d["life_threads"])
-        println("  [PSYCHE] Loaded.")
+        println("  [PSYCHE] Завантажено.")
     catch e
         ;
-        println("  [PSYCHE] Error: $e");
+        println("  [PSYCHE] Помилка: $e");
     end
 end
