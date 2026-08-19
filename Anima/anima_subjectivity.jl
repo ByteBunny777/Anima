@@ -35,6 +35,12 @@ const SUBJ_INTERP_WEIGHT = 0.18
 const SUBJ_STANCE_DECAY = 0.998
 const SUBJ_STANCE_LEARN_RATE = 0.08
 
+# скільки закриттів тієї самої теми (topic_id) треба, щоб рахувати reuse across contexts
+const CONCEPT_MIN_CANDIDATES = 2
+# наскільки має впасти signal_mean між найпершим і найостаннішим кандидатом теми,
+# щоб рахувати це prediction compression, а не шум
+const CONCEPT_COMPRESSION_MARGIN = 0.05
+
 _sfdb(x, d::Float64 = 0.0) = (ismissing(x) || isnothing(x)) ? d : Float64(x)
 _sidb(x, d::Int = 0) = (ismissing(x) || isnothing(x)) ? d : Int(x)
 
@@ -154,6 +160,30 @@ CREATE TABLE IF NOT EXISTS positional_stances (
     last_updated    INTEGER NOT NULL DEFAULT 0
 );
 """,
+    )
+
+    SQLite.execute(
+        db,
+        """
+CREATE TABLE IF NOT EXISTS concepts (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    key                TEXT    NOT NULL UNIQUE,
+    topic_id           TEXT    NOT NULL,
+    label              TEXT    NOT NULL DEFAULT '',
+    strength           REAL    NOT NULL DEFAULT 0.5,
+    confirmations      INTEGER NOT NULL DEFAULT 0,
+    reuse_count        INTEGER NOT NULL DEFAULT 0,
+    compression_delta  REAL    NOT NULL DEFAULT 0.0,
+    utility_confirmed  INTEGER NOT NULL DEFAULT 0,
+    utility_uses       INTEGER NOT NULL DEFAULT 0,
+    first_seen_flash   INTEGER NOT NULL DEFAULT 0,
+    last_seen_flash    INTEGER NOT NULL DEFAULT 0
+);
+""",
+    )
+    SQLite.execute(
+        db,
+        "CREATE INDEX IF NOT EXISTS idx_concepts_topic ON concepts(topic_id);",
     )
 
     nothing
@@ -786,6 +816,116 @@ UPDATE pattern_candidates SET promoted = 1 WHERE id = ?
     end
 
     _subj_refresh_emerged!(subj)
+    nothing
+end
+
+# --- Concept Formation (план, п.3) -----------------------------------------
+# Вхід: concept_candidates — сирі знімки CuriosityObject з closure=:compressed
+# (anima_memory_db.jl:save_concept_candidate!, викликається з anima_background.jl
+# в тій самій точці, де вже спрацьовує [CURIOSITY_CLOSED]).
+#
+# Два з трьох критеріїв плану перевіряються тут, детерміновано, без LLM:
+#   reuse across contexts — тема (topic_id) закривалась >=CONCEPT_MIN_CANDIDATES
+#     разів; на відміну від co-occurrence-кластеризації, topic_id вже канонічний
+#     (derive_topic_id, anima_psyche.jl), тож це не поверхневий кластер — той самий
+#     ключ означає ту саму структурну напругу, а не збіг слів
+#   prediction compression — пізніші закриття теми дешевші за перші
+#     (signal_mean падає >= CONCEPT_COMPRESSION_MARGIN від першого до останнього
+#     кандидата); проксі для "знаючи це, я менше дивуюсь" без прямого зв'язку
+#     з episodic_memory.prediction_error, якого поки нема per-topic
+#
+# utility gain — третій критерій плану — свідомо НЕ перевіряється тут: не можна
+# вимагати "вже використовується в рішеннях" до того, як концепт існує. concepts
+# народжується як candidate (utility_confirmed=0); підключення до реального
+# впливу на рішення (симетрично dominant_eb_strength в subj_interpret!, тільки
+# про світ/інших, не про себе) — окрема, ще не написана функція.
+function subj_form_concepts!(subj::SubjectivityEngine, flash::Int)
+    db = subj.mem.db
+
+    rows = Tables.rowtable(
+        DBInterface.execute(
+            db,
+            """
+SELECT id, topic_id, label, signal_mean, closed_flash
+FROM concept_candidates
+WHERE promoted = 0
+ORDER BY topic_id, closed_flash ASC
+""",
+        ),
+    )
+    isempty(rows) && return
+
+    by_topic = Dict{String,Vector{NamedTuple}}()
+    for r in rows
+        push!(get!(by_topic, String(r.topic_id), NamedTuple[]), r)
+    end
+
+    for (topic_id, group) in by_topic
+        length(group) < CONCEPT_MIN_CANDIDATES && continue
+
+        first_signal = _sfdb(group[1].signal_mean)
+        last_signal = _sfdb(group[end].signal_mean)
+        compression_delta = first_signal - last_signal
+
+        # тема повторюється, але не дешевшає — рано казати що вона "стиснута"
+        compression_delta < CONCEPT_COMPRESSION_MARGIN && continue
+
+        label = String(group[end].label)
+        key = "CPT:$(topic_id)"
+        n_new = length(group)
+
+        existing = Tables.rowtable(
+            DBInterface.execute(db, "SELECT id FROM concepts WHERE key = ?", (key,)),
+        )
+        is_new = isempty(existing)
+
+        if is_new
+            DBInterface.execute(
+                db,
+                """
+INSERT INTO concepts
+    (key, topic_id, label, strength, confirmations, reuse_count,
+     compression_delta, first_seen_flash, last_seen_flash)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+""",
+                (
+                    key, topic_id, label, 0.5, n_new, n_new,
+                    compression_delta, _sidb(group[1].closed_flash), flash,
+                ),
+            )
+        else
+            DBInterface.execute(
+                db,
+                """
+UPDATE concepts
+SET confirmations     = confirmations + ?,
+    reuse_count        = reuse_count + ?,
+    compression_delta  = ?,
+    last_seen_flash    = ?,
+    strength            = MIN(1.0, strength + 0.05)
+WHERE key = ?
+""",
+                (n_new, n_new, compression_delta, flash, key),
+            )
+        end
+
+        DBInterface.execute(
+            db,
+            "UPDATE concept_candidates SET promoted = 1, cluster_key = ? WHERE topic_id = ? AND promoted = 0",
+            (key, topic_id),
+        )
+
+        if is_new
+            _bg_log_dispatch(
+                "  [SUBJ] Новий концепт: \"$(key)\" ($(label)), reuse=$(n_new) compression=$(round(compression_delta, digits=2))",
+            )
+            push_gui_event!("concept", Dict(
+                "key" => key, "label" => label,
+                "reuse" => n_new, "flash" => flash,
+            ))
+        end
+    end
+
     nothing
 end
 

@@ -370,6 +370,28 @@ CREATE TABLE IF NOT EXISTS causal_trace (
         "CREATE INDEX IF NOT EXISTS idx_ctrace_flash ON causal_trace(flash DESC);",
     )
 
+    SQLite.execute(
+        db,
+        """
+CREATE TABLE IF NOT EXISTS concept_candidates (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_id            TEXT    NOT NULL,
+    label               TEXT    NOT NULL DEFAULT '',
+    origin              TEXT    NOT NULL DEFAULT '',
+    signal_mean         REAL    NOT NULL DEFAULT 0.0,
+    consecutive_progress INTEGER NOT NULL DEFAULT 0,
+    created_flash       INTEGER NOT NULL DEFAULT 0,
+    closed_flash        INTEGER NOT NULL DEFAULT 0,
+    cluster_key         TEXT,
+    promoted            INTEGER NOT NULL DEFAULT 0
+);
+""",
+    )
+    SQLite.execute(
+        db,
+        "CREATE INDEX IF NOT EXISTS idx_concept_cand_topic ON concept_candidates(topic_id);",
+    )
+
     # Міграція: causal_trace могла існувати до MAL / до identity_drift (Тренди в часі).
     # CREATE TABLE IF NOT EXISTS вище не додає колонки до існуючої таблиці —
     # додаємо їх вручну, ідемпотентно.
@@ -452,6 +474,36 @@ function save_causal_trace!(db::SQLite.DB, trace::NamedTuple)
             trace.progress_target,
             trace.churn,
             trace.identity_drift,
+        ),
+    )
+end
+
+# --- Concept Formation, Етап 1: захоплення кандидатів ---------------------
+# CuriosityObject з closure=:compressed — тільки compression_candidate, не факт
+# концепту (див. коментар при check_closure! в anima_psyche.jl). Тут — лише
+# збереження сирого матеріалу до того, як _prune_curiosity! прибере resolved-
+# об'єкт з CuriosityRegistry.objects. Оцінка трьох критеріїв (prediction
+# compression, utility gain, reuse across contexts) і промоушн у `concepts` —
+# окрема функція, ще не написана.
+function save_concept_candidate!(
+    db::SQLite.DB,
+    obj,  # CuriosityObject
+    closed_flash::Int,
+)
+    DBInterface.execute(
+        db,
+        """INSERT INTO concept_candidates
+           (topic_id, label, origin, signal_mean, consecutive_progress,
+            created_flash, closed_flash)
+           VALUES (?,?,?,?,?,?,?)""",
+        (
+            obj.id,
+            obj.label,
+            String(obj.origin),
+            obj.signal_mean,
+            obj.consecutive_progress,
+            obj.created_flash,
+            closed_flash,
         ),
     )
 end

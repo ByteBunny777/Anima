@@ -507,6 +507,14 @@ function update_identity_drift!(
     if al.identity_drift > 0.25
         al.identity_threat = clamp(al.identity_threat + (al.identity_drift - 0.25) * 0.15, 0.0, 1.0)
     end
+
+    # Temporal Self-Perception, Дія А: стійке зростання drift за останнє вікно —
+    # окремо від абсолютного порогу вище. Ловить повільне, стабільне відходження
+    # від себе ще до того, як воно перетне 0.25, а не тільки різкий стрибок.
+    tt = al.temporal_trend
+    if tt.computed_at_flash > 0 && tt.d_identity_drift > 0.02
+        al.identity_threat = clamp(al.identity_threat + tt.d_identity_drift * 1.5, 0.0, 1.0)
+    end
 end
 # Порівнює posterior_mu (що стало) з prior_mu (що очікувалось) по VAD.
 # Відхилення з негативною валентністю → self_discomfort.
@@ -729,6 +737,12 @@ function update_self!(
         end
         # стабільна agency — впевненість зростає
         agency.agency_confidence > 0.65 && spe.trend < 0.3 && (esc = clamp01(esc + 0.012))
+        # Temporal Self-Perception, Дія А: не одна погана оцінка, а стійке падіння
+        # audit_score за останнє вікно (~20-50 флешів) — тривожніше за одиничний спад
+        tt = al.temporal_trend
+        if tt.computed_at_flash > 0 && tt.d_audit_score < -0.08
+            esc = clamp01(esc - min(-tt.d_audit_score, 0.3) * 0.15)
+        end
         # повільний drift до базового 0.6
         esc = clamp01(esc + (0.6 - esc) * 0.008)
         al.epistemic_self_confidence = esc

@@ -347,12 +347,15 @@ end
 # --- Psyche Slow Tick (психіка між взаємодіями) ----------------------------
 
 """
-    psyche_slow_tick!(a)
+    psyche_slow_tick!(a, mem=nothing)
 
 Природній часовий дрейф психічних станів: хронічний афект, очікування,
 сором, потреби, втома.
+
+mem — опційно, потрібен лише для захоплення concept_candidates у момент
+закриття CuriosityObject (Concept Formation, Етап 1).
 """
-function psyche_slow_tick!(a::Anima)
+function psyche_slow_tick!(a::Anima, mem = nothing)
     # ChronifiedAffect
     ca = a.chronified
     if a.nt.noradrenaline > 0.5 && a.nt.serotonin < 0.4
@@ -454,6 +457,16 @@ function psyche_slow_tick!(a::Anima)
                     "consecutive" => Int(obj.consecutive_progress),
                     "flash"       => a.flash_count,
                 ))
+                # Concept Formation, Етап 1: тільки compression_candidate (не
+                # :dormant), і тільки поки об'єкт ще живий — за _prune_curiosity!
+                # видалить його з реєстру назавжди.
+                if obj.closure == :compressed && !isnothing(mem)
+                    try
+                        save_concept_candidate!(mem.db, obj, a.flash_count)
+                    catch e
+                        @warn "[BG] save_concept_candidate!: $e"
+                    end
+                end
             end
         end
     end
@@ -801,7 +814,7 @@ function slow_tick!(
     _maybe_self_initiate!(a, mem, dialog_history, initiative_ch)
 
     # Psyche drift
-    psyche_slow_tick!(a)
+    psyche_slow_tick!(a, mem)
     authorship_slow_tick!(a.authorship, a.flash_count)
     reflect_authorship!(
         a.authorship,
@@ -834,12 +847,25 @@ function slow_tick!(
         end
     end
 
-    # Subjectivity: emerge beliefs (тільки при нових подіях)
-    if !isnothing(subj) && (a.flash_count != subj._emerged_cache_flash)
+    # Subjectivity: emerge beliefs + concepts (тільки при нових подіях).
+    # Умову рахуємо один раз ДО виклику subj_emerge_beliefs! — вона сама
+    # виставляє _emerged_cache_flash, і якби перевіряли її вдруге після,
+    # subj_form_concepts! ніколи б не спрацював.
+    _subj_new_flash = !isnothing(subj) && (a.flash_count != subj._emerged_cache_flash)
+    if _subj_new_flash
         try
             subj_emerge_beliefs!(subj, a.flash_count)
         catch e
             @warn "[BG] subj_emerge_beliefs: $e"
+        end
+    end
+
+    # Concept Formation, Етап 2: оцінка кандидатів і промоушн у concepts.
+    if _subj_new_flash
+        try
+            subj_form_concepts!(subj, a.flash_count)
+        catch e
+            @warn "[BG] subj_form_concepts!: $e"
         end
     end
 
