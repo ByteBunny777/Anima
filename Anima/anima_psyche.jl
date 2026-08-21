@@ -5,6 +5,10 @@
 
 # Потребує anima_core.jl
 
+if !isdefined(@__MODULE__, :push_gui_event!)
+    push_gui_event!(kind::String, payload::AbstractDict) = nothing
+end
+
 # --- Narrative Gravity -----------------------------------------------------
 
 struct GravEvent
@@ -2302,18 +2306,42 @@ function surface_thread!(threads::Vector{CuriosityThread}, co::CuriosityObject, 
     end
 end
 
+const THREAD_DORMANT_IDLE = 150
+const THREAD_PRUNE_IDLE = 500  # незворотне видалення: набагато далі за dormant
+
 # Decay і перехід в :dormant для threads що давно не поверхнялись.
 # pressure зростає плавно — без порогового стрибка.
+# Незворотна втрата: :dormant-thread що покинутий надовго (idle > THREAD_PRUNE_IDLE)
+# видаляється з вектора назавжди — не просто decay. Стосується лише :dormant
+# (не :resolved — те позитивний результат, не втрата). Якщо та сама тема
+# спливе пізніше, surface_thread! створить НОВИЙ thread (pressure=0, свіжий
+# origin_flash) — стара історія/pressure не відновлюється.
 function tick_threads!(threads::Vector{CuriosityThread}, flash::Int)
+    pruned = String[]
     for t in threads
         t.status == :resolved && continue
         idle = flash - t.last_surface_flash
         # плавне зростання: ~0.003 за флеш при idle=30, ~0.006 при idle=60
         pressure_delta = clamp(idle / 10_000.0, 0.0, 0.008)
         t.pressure = clamp(t.pressure + pressure_delta, 0.0, 1.0)
-        if idle > 150
+        if idle > THREAD_DORMANT_IDLE
             t.status = :dormant
         end
+        if t.status == :dormant && idle > THREAD_PRUNE_IDLE
+            push!(pruned, t.id)
+            println("[THREAD_PRUNED] '$(t.label)' (id=$(t.id)) видалено назавжди — покинутий $idle флешів, pressure=$(round(t.pressure, digits=3))")
+            push_gui_event!("thread_pruned", Dict(
+                "id" => t.id,
+                "label" => t.label,
+                "idle" => idle,
+                "pressure" => round(t.pressure, digits = 3),
+                "flash" => flash,
+            ))
+        end
+    end
+    if !isempty(pruned)
+        prune_set = Set(pruned)
+        filter!(t -> t.id ∉ prune_set, threads)
     end
 end
 
