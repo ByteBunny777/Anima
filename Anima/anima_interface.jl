@@ -1516,6 +1516,7 @@ function experience!(
         self_agency = self_snap.agency.causal_ownership,
         sbg_stability = self_snap.sbg.attractor_stability,
         sbg_epistemic = self_snap.sbg.epistemic_trust,
+        sbg_graveyard = self_snap.sbg.graveyard,
         self_discomfort = a.agency.self_discomfort,
         self_coherence  = a.agency.self_coherence,
         sbg_narrative = self_snap.sbg.narrative,
@@ -1713,7 +1714,7 @@ function log_flash(r)
         def_str
     )
     @printf(
-        "       Self: spe=%.2f agency=%.2f stab=%.2f etrust=%.2f | sd=%.2f sc=%.2f | Crisis: [%s] coh=%.2f\n",
+        "       Self: spe=%.2f agency=%.2f stab=%.2f etrust=%.2f | sd=%.2f sc=%.2f | Crisis: [%s] coh=%.2f | grave=%d\n",
         r.self_pred_error,
         r.self_agency,
         r.sbg_stability,
@@ -1721,7 +1722,8 @@ function log_flash(r)
         r.self_discomfort,
         r.self_coherence,
         r.crisis_mode,
-        r.crisis_coherence
+        r.crisis_coherence,
+        r.sbg_graveyard
     )
     if hasfield(typeof(r), :inner_dialogue) && !isnothing(r.inner_dialogue)
         id = r.inner_dialogue
