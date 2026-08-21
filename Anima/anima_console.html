@@ -484,6 +484,7 @@ var I18N = {
         ['agency', 'Відчуття авторства — чи є Аніма причиною того, що відбувається, чи просто реагує.'],
         ['stab', 'Стабільність ідентичності — наскільки незмінним залишається стрижень самосприйняття.'],
         ['etrust', 'Епістемічна довіра — наскільки Аніма довіряє своїм знанням і прогнозам.'],
+        ['graveyard', 'Незворотно втрачені переконання — скільки всього назавжди видалено з self-графа (без права повернення).'],
         ['sd', 'Self-discomfort — внутрішній дискомфорт від суперечності між собою і дійсністю.'],
         ['sc', 'Self-coherence — узгодженість поточних суджень із базовою ідентичністю.'],
         ['crisis', 'Режим кризи: інтегрована / фрагментована / дезінтегрована.'],
@@ -561,6 +562,7 @@ var I18N = {
         ['agency', 'Sense of authorship — is Anima causing what happens, or just reacting?'],
         ['stab', 'Identity stability — how consistent the core self-perception remains.'],
         ['etrust', 'Epistemic trust — how much Anima trusts her own knowledge and predictions.'],
+        ['graveyard', 'Irreversibly lost beliefs — total permanently deleted from the self-graph (no right of return).'],
         ['sd', 'Self-discomfort — internal friction from contradiction between self and reality.'],
         ['sc', 'Self-coherence — alignment of current judgments with baseline identity.'],
         ['crisis', 'Crisis mode: integrated / fragmented / disintegrated.'],
@@ -684,7 +686,7 @@ function freshState(){
   return {
     vitals:{D:null,S:null,N:null,phi:null,phiPrev:null,label:null,mood:null,flashId:null,
             vfe:null,vfeMode:null,bpm:null,hrv:null,attn:null,G:null,Gdelta:null,H:null,vfeDrift:null},
-    self:{spe:null,agency:null,stab:null,etrust:null,sd:null,sc:null,crisis:null,coh:null,
+    self:{spe:null,agency:null,stab:null,etrust:null,sd:null,sc:null,crisis:null,coh:null,graveyard:null,
           disclosure:null,disclosureThr:null,shadowP:null,intent:null,flashId:null,
           contactNeed:null,identityDrift:null,chronicLowSerotonin:null},
     mal:{regimeFrom:null,regimeTo:null,dominant:null,score:null,det:null,runnerUp:null,
@@ -728,6 +730,14 @@ var PATTERNS = [
     handle:function(m, st){
       st.causal.events.push('🗜️ closed: ' + m[1]);
     }},
+  { re:/^\[BELIEF_COLLAPSED\]\s+(.+)/,
+    handle:function(m, st){
+      st.causal.events.push('⚰️ collapsed: ' + m[1]);
+    }},
+  { re:/^\[THREAD_PRUNED\]\s+(.+)/,
+    handle:function(m, st){
+      st.causal.events.push('🍂 pruned: ' + m[1]);
+    }},
   { re:/^\[CONTACT_SAT\]\s+contact_need\s+([\d.]+)\s*→\s*([\d.]+)/,
     handle:function(m, st){
       st.causal.events.push('🤝 contact_sat: ' + m[1] + ' → ' + m[2]);
@@ -752,10 +762,11 @@ var PATTERNS = [
       st.vitals.vfe=parseFloat(m[1]); st.vitals.vfeMode=m[2]; st.vitals.bpm=parseFloat(m[3]); st.vitals.hrv=parseFloat(m[4]);
       st.vitals.attn=parseFloat(m[5]); st.vitals.G=parseFloat(m[6]); st.vitals.Gdelta=parseFloat(m[7]); st.vitals.H=parseFloat(m[8]);
     }},
-  { re:/^Self:\s*spe=([\d.]+)\s+agency=([\d.]+)\s+stab=([\d.]+)\s+etrust=([\d.]+)\s*\|\s*sd=([\d.]+)\s+sc=([\d.]+)\s*\|\s*Crisis:\s*\[([^\]]+)\]\s+coh=([\d.]+)/,
+  { re:/^Self:\s*spe=([\d.]+)\s+agency=([\d.]+)\s+stab=([\d.]+)\s+etrust=([\d.]+)\s*\|\s*sd=([\d.]+)\s+sc=([\d.]+)\s*\|\s*Crisis:\s*\[([^\]]+)\]\s+coh=([\d.]+)(?:\s*\|\s*grave=(\d+))?/,
     handle:function(m, st){
       st.self.spe=parseFloat(m[1]); st.self.agency=parseFloat(m[2]); st.self.stab=parseFloat(m[3]); st.self.etrust=parseFloat(m[4]);
       st.self.sd=parseFloat(m[5]); st.self.sc=parseFloat(m[6]); st.self.crisis=m[7]; st.self.coh=parseFloat(m[8]);
+      if(m[9] !== undefined) st.self.graveyard=parseInt(m[9]);
     }},
   { re:/^Disclosure:\s*\[(\w+)\]\s+thr=([\d.]+)\s*\|\s*Shadow:\s*p=([\d.]+)/,
     handle:function(m, st){
@@ -912,6 +923,7 @@ function renderSelf(s){
   rows.push(metricRowSpark('agency', fmt(s.agency),
     sparklineSvg(metricHistory.agency, '#9B7EDE')));
   rows.push(metricRow('stab / etrust', fmt(s.stab) + ' / ' + fmt(s.etrust)));
+  rows.push(metricRow('graveyard', s.graveyard != null ? String(s.graveyard) : '—'));
   rows.push(metricRow('sd / sc', fmt(s.sd) + ' / ' + fmt(s.sc)));
   rows.push(metricRow('crisis', s.crisis ? ('[' + s.crisis + ']') : '—'));
   rows.push(metricRowSpark('coh', fmt(s.coh),
@@ -1088,6 +1100,7 @@ function applyLiveState(raw){
 
   s.spe = raw.self.spe; s.agency = raw.self.agency; s.stab = raw.self.stab; s.etrust = raw.self.etrust;
   s.sd = raw.self.sd; s.sc = raw.self.sc; s.crisis = raw.self.crisis; s.coh = raw.self.coh;
+  s.graveyard = raw.self.graveyard != null ? raw.self.graveyard : s.graveyard;
   s.disclosure = raw.self.disclosure; s.disclosureThr = raw.self.disclosure_thr;
   s.shadowP = raw.self.shadow_p; s.intent = raw.self.intent; s.flashId = raw.flash_id;
   s.contactNeed = raw.self.contact_need != null ? raw.self.contact_need : null;
@@ -1153,6 +1166,13 @@ function routeLiveEvent(ev){
   } else if(ev.kind === 'curiosity_closed'){
     var icon = ev.closure === 'compressed' ? '🗜️' : '💤';
     liveState.causal.events.push(icon + ' closed(' + (ev.closure || '') + '): "' + (ev.label || '') + '" age=' + (ev.age || '') + ' cons=' + (ev.consecutive || '') + ' flash=' + (ev.flash || ''));
+    renderEvents('causalEvents', liveState.causal.events);
+  } else if(ev.kind === 'belief_collapsed'){
+    liveState.self.graveyard = ev.graveyard_size != null ? ev.graveyard_size : liveState.self.graveyard;
+    liveState.causal.events.push('⚰️ collapsed: "' + (ev.name || '') + '" confidence=' + fmt(ev.confidence) + ' flash=' + (ev.flash || ''));
+    renderEvents('causalEvents', liveState.causal.events);
+  } else if(ev.kind === 'thread_pruned'){
+    liveState.causal.events.push('🍂 pruned: "' + (ev.label || '') + '" idle=' + (ev.idle || '') + ' pressure=' + fmt(ev.pressure) + ' flash=' + (ev.flash || ''));
     renderEvents('causalEvents', liveState.causal.events);
   } else if(ev.kind === 'contact_sat'){
     liveState.self.contactNeed = ev.contact_need != null ? ev.contact_need : liveState.self.contactNeed;
