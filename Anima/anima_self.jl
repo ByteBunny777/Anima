@@ -7,6 +7,10 @@
 
 # Потребує: anima_core.jl
 
+if !isdefined(@__MODULE__, :push_gui_event!)
+    push_gui_event!(kind::String, payload::AbstractDict) = nothing
+end
+
 # --- Self Belief ------------------------------------------------------------
 
 mutable struct SelfBelief
@@ -49,6 +53,7 @@ mutable struct SelfBeliefGraph
             Tuple{Int,String,Float64,Int},
         },
     }
+    graveyard::Set{String}  # назви незворотно видалених переконань — без права повернення
 end
 
 function SelfBeliefGraph()
@@ -65,6 +70,7 @@ function SelfBeliefGraph()
         }(
             30,
         ),
+        Set{String}(),
     )
 
     # Мінімальний core
@@ -87,6 +93,24 @@ function SelfBeliefGraph()
     )
 
     g
+end
+
+# Незворотна втрата: якщо переконання впало нижче порогу колапсу — видаляється
+# з графа назавжди (graveyard), без права на learn_belief! в майбутньому.
+# Без винятків для origin=:innate — навіть базові переконання можуть загинути.
+function _collapse_and_remove!(g::SelfBeliefGraph, b::SelfBelief, flash::Int)
+    !belief_collapsed(b) && return false
+    haskey(g.beliefs, b.name) || return false
+    delete!(g.beliefs, b.name)
+    push!(g.graveyard, b.name)
+    println("[BELIEF_COLLAPSED] '$(b.name)' видалено назавжди (confidence=$(round(b.confidence, digits=3)), flash=$flash)")
+    push_gui_event!("belief_collapsed", Dict(
+        "name" => b.name,
+        "confidence" => round(b.confidence, digits = 3),
+        "flash" => flash,
+        "graveyard_size" => length(g.graveyard),
+    ))
+    true
 end
 
 function confirm_belief!(
@@ -117,6 +141,7 @@ function challenge_belief!(
     b.confidence = clamp01(b.confidence - effective_strength)
     b.violations += 1
     b.last_challenged_flash = flash
+    _collapse_and_remove!(g, b, flash)
 
     cascade_depth = 0
     if belief_under_pressure(b) && old_confidence > 0.35
@@ -158,7 +183,9 @@ function _cascade_challenge!(
         cascade_str = strength * parent.centrality * 0.7
         dep.confidence = clamp01(dep.confidence - cascade_str)
         dep.violations += 1
-        if belief_under_pressure(dep)
+        was_pressured = belief_under_pressure(dep)
+        _collapse_and_remove!(g, dep, flash)
+        if was_pressured
             d = _cascade_challenge!(g, dep, flash, cascade_str*0.6, depth+1, visited)
             max_depth = max(max_depth, d)
         end
@@ -175,6 +202,7 @@ function learn_belief!(
     dependents::Vector{String} = String[],
 )
     haskey(g.beliefs, name) && return
+    name in g.graveyard && return  # незворотно втрачене — без права повернення
     g.epistemic_trust < 0.3 && return
     g.beliefs[name] = SelfBelief(
         name;
@@ -246,6 +274,7 @@ function sbg_snapshot(g::SelfBeliefGraph)
         strong = n_strong,
         under_pressure = n_pressure,
         collapsed = n_collapsed,
+        graveyard = length(g.graveyard),  # незворотно втрачені переконання, всього
         attractor_stability = round(g.attractor_stability, digits = 3),
         epistemic_trust = round(g.epistemic_trust, digits = 3),
         self_world_mismatch = round(g.self_world_mismatch, digits = 3),
@@ -269,12 +298,17 @@ function sbg_to_json(g::SelfBeliefGraph)::Dict
         ),
         "epistemic_trust"=>g.epistemic_trust,
         "attractor_stability"=>g.attractor_stability,
+        "graveyard"=>collect(g.graveyard),
     )
 end
 
 function sbg_from_json!(g::SelfBeliefGraph, d::AbstractDict)
+    for gname in get(d, "graveyard", String[])
+        push!(g.graveyard, String(gname))
+    end
     for (name, bd) in get(d, "beliefs", Dict())
         sname = String(name)
+        sname in g.graveyard && continue  # незворотно втрачене — не відновлюємо навіть зі старого запису
         if haskey(g.beliefs, sname)
             g.beliefs[sname].confidence = Float64(bd["confidence"])
             g.beliefs[sname].confirmations = Int(get(bd, "confirmations", 0))
@@ -298,6 +332,10 @@ function sbg_from_json!(g::SelfBeliefGraph, d::AbstractDict)
     end
     g.epistemic_trust = Float64(get(d, "epistemic_trust", 0.75))
     g.attractor_stability = Float64(get(d, "attractor_stability", 0.8))
+    # старі записи (до цієї фічі) могли зберегти переконання вже нижче порогу колапсу
+    for b in collect(values(g.beliefs))
+        belief_collapsed(b) && _collapse_and_remove!(g, b, 0)
+    end
     _recompute_stability!(g)
 end
 
