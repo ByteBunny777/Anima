@@ -82,6 +82,7 @@ function write_gui_state!(a::Anima, r; audit = nothing, cf_co = nothing)
         "self" => Dict(
             "spe" => r.self_pred_error, "agency" => r.self_agency,
             "stab" => r.sbg_stability, "etrust" => r.sbg_epistemic,
+            "graveyard" => r.sbg_graveyard,
             "sd" => r.self_discomfort, "sc" => r.self_coherence,
             "crisis" => r.crisis_mode, "coh" => r.crisis_coherence,
             "disclosure"     => isnothing(id) ? nothing : String(id.mode),
@@ -169,6 +170,7 @@ function gui_live_state(a)::Dict
             "agency" => ag.level,
             "stab"   => sbg.attractor_stability,
             "etrust" => sbg.epistemic_trust,
+            "graveyard" => length(sbg.graveyard),
             "sd"     => ag.self_discomfort,
             "sc"     => ag.self_coherence,
             "crisis" => string(cr.current_mode),
