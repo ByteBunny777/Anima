@@ -1932,6 +1932,21 @@ function repl_with_background!(
                             _ct.progress_signal     = _progress_signal
                             _ct.progress_target     = _progress_target
                             _ct.churn               = _churn
+                            _ct.llm_reply           = llm_reply
+
+                            # Inner LM: живе навчання щофлешу на власному досвіді —
+                            # (user_message, llm_reply) цього флешу. Ваги — не пам'ять,
+                            # SQLite (llm_reply вище) — сирий досвід; окремі речі.
+                            try
+                                _lm_text = build_flash_text(_ct.user_message, llm_reply)
+                                _lm_loss = lm_learn!(a.inner_lm, _lm_text)
+                                if !isnothing(_lm_loss)
+                                    @info "[LM] flash=$(a.flash_count) loss=$(round(_lm_loss, digits=3)) trained_total=$(a.inner_lm.meta.total_flashes_trained)"
+                                end
+                            catch e
+                                @warn "[LM] learn! failed: $e"
+                            end
+
                             save_causal_trace!(bg.mem.db, (
                                 flash               = _ct.flash,
                                 timestamp           = _ct.timestamp,
@@ -1965,6 +1980,7 @@ function repl_with_background!(
                                 progress_target     = _ct.progress_target,
                                 churn               = Int(_ct.churn),
                                 identity_drift      = Float64(a.agency.identity_drift),
+                                llm_reply           = _ct.llm_reply,
                             ))
                             write_gui_state!(a, _last_r; audit = _audit, cf_co = cf_co)
                         catch e
