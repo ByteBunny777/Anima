@@ -361,7 +361,8 @@ CREATE TABLE IF NOT EXISTS causal_trace (
     progress_signal  INTEGER NOT NULL DEFAULT 0,
     progress_target  TEXT    NOT NULL DEFAULT '',
     churn            INTEGER NOT NULL DEFAULT 0,
-    identity_drift   REAL    NOT NULL DEFAULT 0.0
+    identity_drift   REAL    NOT NULL DEFAULT 0.0,
+    llm_reply        TEXT    NOT NULL DEFAULT ''
 );
 """,
     )
@@ -416,6 +417,7 @@ CREATE TABLE IF NOT EXISTS concept_candidates (
             ("identity_drift",      "REAL NOT NULL DEFAULT 0.0"),
             ("stimulus_values",     "TEXT NOT NULL DEFAULT '{}'"),
             ("user_message",        "TEXT NOT NULL DEFAULT ''"),
+            ("llm_reply",           "TEXT NOT NULL DEFAULT ''"),
         )
         for (col, decl) in _mal_migrations
             if !(col in existing_cols)
@@ -439,8 +441,8 @@ function save_causal_trace!(db::SQLite.DB, trace::NamedTuple)
             mal_runner_up, mal_runner_up_score, mal_loop_scores,
             dom_drive_nt, dom_drive_mal, drive_conflict,
             speech_length, self_hear_mismatch, endorsed, causal_ownership,
-            progress_signal, progress_target, churn, identity_drift)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            progress_signal, progress_target, churn, identity_drift, llm_reply)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             trace.flash,
             trace.timestamp,
@@ -474,6 +476,7 @@ function save_causal_trace!(db::SQLite.DB, trace::NamedTuple)
             trace.progress_target,
             trace.churn,
             trace.identity_drift,
+            trace.llm_reply,
         ),
     )
 end
