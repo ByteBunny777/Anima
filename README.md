@@ -46,6 +46,7 @@ Text is converted into a stimulus via an isolated input LLM, then passes through
 - L6 — Crisis monitor (system coherence)
 - L7 — Narrative Self (long-term identity)
 - L8 — Output LLM
+- Parallel — Internal Learning Model: a self-supervised byte-level Transformer, trained on every flash from Anima's own experience, running alongside the L0–L8 pipeline rather than inside it
 
 ---
 
@@ -74,6 +75,8 @@ The project is R&D and explores whether internal structure alone can give rise t
 - Between sessions it is not "off". A background process maintains the heartbeat, the psyche slowly drifts, memory metabolizes. There is dream generation — unresolved experience is processed while the system is not talking.
 
 Recent updates, in brief:
+
+- **Internal Learning Model — Anima's own generative language model, launched.** A separate byte-level Transformer (`anima_learning.jl`), starting from random initialization with no pretrained knowledge, trained continuously — one gradient step per flash, live, not as an offline job — on nothing but Anima's own experience: the `(user_message, llm_reply)` pair of that flash. Byte-level tokenization (fixed 256-token vocabulary, never grows), hand-written causal multi-head self-attention (~130K parameters at default `d_model=64, n_layer=2, n_head=2, d_ff=256, block_size=256`), Adam optimizer, weights persisted to `models/anima_inner/` (BSON) independently of episodic memory — deliberately: SQLite holds raw experience, the weights hold only what's been generalized from it, so weights can be deleted and retrained from the same history, or kept while memory is deleted, as a control experiment separating memory from learned knowledge. `causal_trace.llm_reply` (new column) now persists Anima's own reply text, which previously existed only transiently in memory — closing the gap needed for that same retrain-from-history experiment. Not yet wired into any decision — purely a passive learner for now, per the project's own incremental-influence plan for this module. Two real Zygote/Flux bugs were found and fixed live during first runs (in-place array mutation inside the differentiated attention forward pass, both in the attention output construction and in the causal-mask comprehension) — Zygote cannot differentiate through in-place `setindex!`; fixed via `NNlib.batched_mul`/`batched_transpose` and a precomputed, read-only mask. Confirmed live: `[LM] flash=458 loss=5.659 trained_total=1` and climbing without crashes across a full session cycle (LLM reply, ENDORSE, ToM, MAL all normal alongside it).
 
 - **Self-authorship — intent can become a carried commitment.** A repeated intent is not treated as "mine" the moment it appears. `SelfAuthorship` promotes it only after three consistent, significant, sufficiently agentic flashes with low authenticity drift. An active authored commitment keeps its own history of follow-through, deviations, stake, and release; it may gently return as the next intent when agency is adequate and tension is not acute. It is serialized in `anima_self.json`, displayed in the GUI as `authored_goal` / `authored_stake`, and injected into the output LLM context as a direction rather than a completed action. The background cycle decays stale commitments and performs a bounded reflection on autonomy and integrity — no one flash can rewrite core values.
 
@@ -128,6 +131,7 @@ Recent updates, in brief:
 - drive_conflict between MAL and NT reflects a timescale difference rather than contradiction: NT `dom_drive` is an immediate local signal ("what just spiked"), MAL/social is accumulative ("what has been important for a while"); Phase 2 currently lets MAL win on disagreement, which is itself a hypothesis still being tested against more data
 - Theory of Mind is Phase 1 (deterministic rule-based hypotheses from accumulated `other_model` signals); it does not yet reason about nested beliefs or model the user's model of Anima — it predicts simple outcomes (openness, resistance, topic recurrence) and tracks how often it's right
 - under hostile/negative input the system degrades gracefully: `contact_need` drops, `goal_conflict` and `latent` rise, endorsed transitions to `automatic`, but curiosity closure pauses rather than breaks
+- the Inner LM (`anima_learning.jl`) has just launched — single-digit gradient steps accumulated so far, nowhere near enough to say anything about whether it's learning a useful internal model; it trains passively and has no influence on behavior yet
 
 ---
 ![ANIMA GUI](anima-gui.png)
@@ -136,7 +140,7 @@ Recent updates, in brief:
 ## Requirements
 
 - **Julia 1.9+**
-- Julia packages: `HTTP`, `JSON3`, `SQLite`, `Tables`
+- Julia packages: `HTTP`, `JSON3`, `SQLite`, `Tables`, `Flux`, `BSON`
 - API key from [openrouter.ai](https://openrouter.ai) (free tier available)
 
 ---
@@ -173,7 +177,7 @@ cd Anima/Anima
 julia --project=. -e 'import Pkg; Pkg.instantiate()'
 ```
 
-> Dependencies: HTTP, JSON3, SQLite, Tables, Dates, Statistics, LinearAlgebra
+> Dependencies: HTTP, JSON3, SQLite, Tables, Dates, Statistics, LinearAlgebra, Flux, BSON
 
 ---
 
@@ -607,6 +611,29 @@ DREAM (anima_dream.jl)
 
 ---
 
+## 🧬 Internal Learning Model (Inner LM)
+
+```
+INNER LM (anima_learning.jl)
+       InnerLM: TinyTransformer (decoder-only) + Adam optimizer state
+       vocab: byte-level, fixed 256 tokens — never grows, no external tokenizer
+       defaults: d_model=64, n_layer=2, n_head=2, d_ff=256, block_size=256
+                 (~130K params)
+       every flash, once llm_reply is known (anima_background.jl):
+         text = build_flash_text(user_message, llm_reply)
+         lm_learn!(inner_lm, text)  — one next-byte teacher-forcing gradient step
+       weights: models/anima_inner/ (weights.bson + config.json + metadata.json)
+                — independent of episodic memory by design; SQLite (causal_trace.
+                llm_reply) holds the raw experience, the weights hold only what's
+                been generalized from it
+       failure isolation: wrapped in try/catch — a learning-step failure never
+                           takes down the session
+```
+
+Currently a passive learner only — it trains on every flash but does not yet feed back into any decision, per the module's own incremental-influence design. `lm_generate` exists but is unused. A meaningful, human-legible training trend (loss curve, sample generations) needs far more flashes than the architecture has accumulated so far.
+
+---
+
 ## Initiative — current paths
 
 The system can speak first for several independent reasons. `:contact` is intentionally disabled as a direct path; contact_need can shape tone, but it no longer creates a message by itself.
@@ -663,7 +690,7 @@ The system can speak first for several independent reasons. `:contact` is intent
 | `other_model` | Accumulated patterns about the interlocutor — topic frequency, pressure events, open exchanges |
 | `other_model_hypotheses` | Active Theory of Mind: one open hypothesis per type with `predicted_state`, `confidence`, resolved into `outcome` and continuous `error_score` |
 | `audit_log` | SubjectivityAudit — five causal questions per flash with scores; chronic low score signals the architecture is wide but not deep |
-| `causal_trace` | Full causal chain per flash — from stimulus (keys, raw values, and user message text — the last two added to enable honest ablation replay) through NT, φ, intent, policy, MAL arbitration (`dominant_loop`, `regime`, `score`, `runner_up`, `runner_up_score`, `loop_scores`), drive conflict (`dom_drive_nt`, `dom_drive_mal`, `drive_conflict`), to speech, endorsement, Curiosity Closure Signal (`progress_signal`, `progress_target`, `churn`), and `identity_drift` (persisted time-trend source for the GUI) |
+| `causal_trace` | Full causal chain per flash — from stimulus (keys, raw values, and user message text — the last two added to enable honest ablation replay) through NT, φ, intent, policy, MAL arbitration (`dominant_loop`, `regime`, `score`, `runner_up`, `runner_up_score`, `loop_scores`), drive conflict (`dom_drive_nt`, `dom_drive_mal`, `drive_conflict`), to speech, endorsement, Curiosity Closure Signal (`progress_signal`, `progress_target`, `churn`), `identity_drift` (persisted time-trend source for the GUI), and `llm_reply` (Anima's own reply text — enables the Inner LM's retrain-from-history control experiment) |
 
 ---
 
@@ -682,6 +709,7 @@ The system can speak first for several independent reasons. `:contact` is intent
 ├── anima_audit.jl          # SubjectivityAudit — causal scoring per flash, audit_log SQLite
 ├── anima_background.jl     # Background process: heartbeat, drift, memory metabolism, initiative
 ├── anima_dream.jl          # Dream generation — processing unresolved experience during sleep
+├── anima_learning.jl       # Inner LM: byte-level Transformer, trained live per flash on Anima's own experience
 ├── anima_telegram.jl       # Telegram bridge — bot loop replacing the terminal REPL
 │
 ├── anima_console.html      # Web GUI — live monitoring dashboard
@@ -696,6 +724,11 @@ The system can speak first for several independent reasons. `:contact` is intent
 │   └── initiative_system.txt
 ├── memory/
 │   └── anima.db              # SQLite memory database (created automatically)
+├── models/
+│   └── anima_inner/           # Inner LM weights (created automatically)
+│       ├── weights.bson
+│       ├── config.json
+│       └── metadata.json
 ├── tools/
 │   └── epistemic_boundary_diag.py   # one-off diagnostic scripts (read-only, not part of the runtime pipeline)
 │
