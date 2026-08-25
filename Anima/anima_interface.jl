@@ -39,6 +39,7 @@ include(joinpath(@__DIR__, "anima_core.jl"))
 include(joinpath(@__DIR__, "anima_psyche.jl"))
 include(joinpath(@__DIR__, "anima_self.jl"))
 include(joinpath(@__DIR__, "anima_crisis.jl"))
+include(joinpath(@__DIR__, "anima_learning.jl"))
 
 # anima_input_llm.jl необов'язковий — fallback на text_to_stimulus
 let _input_llm_path = joinpath(@__DIR__, "anima_input_llm.jl")
@@ -241,6 +242,7 @@ mutable struct Anima
     attention_focus::AttentionFocus   # конкурентний фокус уваги
     last_endorsement::Symbol          # результат останнього evaluate_endorsement: :endorsed / :automatic / :not_mine
     ablation::AblationFlags           # ablation-тести: які шари увімкнено
+    inner_lm::InnerLM                 # власна byte-level мовна модель — вчиться щофлешу на (user_message, llm_reply)
 end
 
 function Anima(;
@@ -249,6 +251,7 @@ function Anima(;
     core_mem_path = joinpath(@__DIR__, "anima_core.json"),
     psyche_mem_path = joinpath(@__DIR__, "anima_psyche.json"),
     ablation::AblationFlags = AblationFlags(),
+    inner_lm_dir = joinpath(@__DIR__, "models", "anima_inner"),
 )
     a = Anima(
         personality,
@@ -319,6 +322,7 @@ function Anima(;
         AttentionFocus(),    # attention_focus
         :automatic,          # last_endorsement
         ablation,            # ablation
+        InnerLM(inner_lm_dir), # inner_lm — завантажує наявні ваги з цієї теки або починає з нуля
     )
     # Завантажити
     saved = core_load!(
@@ -547,7 +551,8 @@ function save!(a::Anima; summary = "", verbose = false)
         isfile(intent_path) && rm(intent_path)
     end
 
-    verbose && println("  [ANIMA] Збережено. Спалахів: $(a.flash_count).")
+    lm_save!(a.inner_lm)
+    verbose && println("  [ANIMA] Збережено. Спалахів: $(a.flash_count). LM-флешів натреновано: $(a.inner_lm.meta.total_flashes_trained), останній loss=$(round(a.inner_lm.meta.last_loss, digits=3)).")
 end
 
 # --- apply_recall_ignition! ------------------------------------------
@@ -663,6 +668,7 @@ mutable struct CausalTrace
     self_hear_mismatch::Float64
     endorsed::String
     causal_ownership::Float64
+    llm_reply::String           # текст відповіді Аніми — без нього inner_lm/replay не відтворити симетрично до user_message
     # Curiosity Closure Signal (v1): progress_signal та churn щодо top_curiosity
     progress_signal::Bool
     progress_target::String
@@ -675,7 +681,7 @@ CausalTrace(flash::Int) = CausalTrace(
     "", 0.0, "",
     "", "", 0.0, "", "", 0.0, "",
     "", "", false,
-    0, 0.0, "", 0.0,
+    0, 0.0, "", 0.0, "",
     false, "", false,
 )
 
