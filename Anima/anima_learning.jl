@@ -19,6 +19,14 @@
 # NNlib.batched_mul) і типізована comprehension для causal-маски (замінено
 # на маску, пораховану один раз у конструкторі й лише читану у forward).
 # `@functor` замінено на сучасний, не-deprecated `Flux.@layer ... trainable=(...)`.
+#
+# Чат 42 (25.08.2026): save→restart→load підтверджено живим рестартом.
+# Архітектура піднята з ~130К параметрів (d_model=64/n_layer=2/n_head=2/
+# d_ff=256/block_size=256) до кількох десятків мільйонів (384/6/6/1536/512) —
+# свідомий одноразовий вибір ємності, не "ріст ваг" (така штука в жодній
+# нейромережі так не працює — див. обговорення в чаті). Додано GPU
+# (CUDA.jl, RTX 3050 6GB): якщо CUDA недоступна (пакет не додано, драйвер
+# застарий і т.д.) — тренування падає назад на CPU, нічого не крашиться.
 # ============================================================================
 
 using Flux
@@ -27,6 +35,33 @@ using BSON
 using Random
 using JSON3
 using Statistics
+
+# --- GPU (за наявності) ------------------------------------------------------
+# `using CUDA`+`using cuDNN` — у try/catch: якщо пакет ще не додано
+# (`] add CUDA`, `] add cuDNN`) або драйвер несумісний, InnerLM просто
+# тренується на CPU, як і раніше. Обидва потрібні РАЗОМ: сам `Flux.gpu()`
+# усередині йде через MLDataDevices.jl, а той визнає NVIDIA-бекенд
+# "робочим" лише коли завантажені (не просто встановлені — саме `using`)
+# і CUDA, і cuDNN одразу; з самою лише CUDA `CUDA.functional()` каже
+# правду ("є"), а `MLDataDevices`/`gpu()` мовчки все одно падає на CPU —
+# це реально трапилось на живому запуску (25.08.2026), лог брехав.
+# Функціональність GPU перевіряється РАЗ, при завантаженні файлу.
+const _LM_HAS_CUDA = try
+    using CUDA
+    using cuDNN
+    CUDA.functional()
+catch e
+    @warn "[LM] CUDA/cuDNN недоступні — внутрішня модель тренуватиметься на CPU" exception=e
+    false
+end
+if _LM_HAS_CUDA
+    println("  [LM] GPU виявлено: $(CUDA.name(CUDA.device())). Внутрішня модель тренуватиметься на GPU.")
+else
+    println("  [LM] GPU не використовується — тренування на CPU.")
+end
+
+# Переносить модель/тензор на GPU, якщо є; інакше — без змін (no-op).
+_to_device(x) = _LM_HAS_CUDA ? gpu(x) : x
 
 const LM_VOCAB_SIZE = 256   # byte-level: кожен байт UTF-8 — токен; словник фіксований назавжди, ніколи не росте і не потребує переробки
 
@@ -39,7 +74,7 @@ struct LMConfig
     d_ff::Int
     block_size::Int
 end
-LMConfig(; d_model::Int=64, n_layer::Int=2, n_head::Int=2, d_ff::Int=256, block_size::Int=256) =
+LMConfig(; d_model::Int=384, n_layer::Int=6, n_head::Int=6, d_ff::Int=1536, block_size::Int=512) =
     LMConfig(d_model, n_layer, n_head, d_ff, block_size)
 
 lmconfig_to_dict(c::LMConfig) = Dict(
@@ -47,11 +82,11 @@ lmconfig_to_dict(c::LMConfig) = Dict(
     "d_ff" => c.d_ff, "block_size" => c.block_size, "vocab_size" => LM_VOCAB_SIZE,
 )
 lmconfig_from_dict(d) = LMConfig(
-    d_model    = Int(get(d, "d_model", 64)),
-    n_layer    = Int(get(d, "n_layer", 2)),
-    n_head     = Int(get(d, "n_head", 2)),
-    d_ff       = Int(get(d, "d_ff", 256)),
-    block_size = Int(get(d, "block_size", 256)),
+    d_model    = Int(get(d, "d_model", 384)),
+    n_layer    = Int(get(d, "n_layer", 6)),
+    n_head     = Int(get(d, "n_head", 6)),
+    d_ff       = Int(get(d, "d_ff", 1536)),
+    block_size = Int(get(d, "block_size", 512)),
 )
 
 # --- Byte-level "токенізатор" -----------------------------------------------
@@ -83,7 +118,7 @@ mutable struct CausalSelfAttention
     Wk::Dense
     Wv::Dense
     Wo::Dense
-    causal_mask::Matrix{Float32}  # (block_size, block_size), рахується ОДИН РАЗ при створенні — константа, не вага; forward лише читає зріз [1:T,1:T]
+    causal_mask::AbstractMatrix{Float32}  # (block_size, block_size), рахується ОДИН РАЗ при створенні — константа, не вага; forward лише читає зріз [1:T,1:T]. AbstractMatrix (не конкретний Matrix) навмисно: gpu(model) підміняє це на CuMatrix, конкретний тип відхилив би реконструкцію
 end
 
 # mask[i,j] = 0, якщо ключ j дозволений запиту i (j <= i, тобто минуле/теперішнє);
@@ -180,7 +215,7 @@ end
 
 mutable struct TinyTransformer
     tok_emb::Flux.Embedding
-    pos_emb::Matrix{Float32}
+    pos_emb::AbstractMatrix{Float32}  # AbstractMatrix, не конкретний Matrix — та сама причина, що й у causal_mask вище
     blocks::Vector{TransformerBlock}
     ln_f::LayerNorm
     head::Dense
@@ -240,6 +275,12 @@ function _lm_param_count(model::TinyTransformer)::Int
     length(p)
 end
 
+# Правда про пристрій — не здогадка з прапорця (_LM_HAS_CUDA уже раз
+# збрехав: CUDA.functional()=true, а gpu() під капотом MLDataDevices все
+# одно тихо повернув CPU-масив). Дивимось на РЕАЛЬНИЙ тип масиву ваг.
+_lm_device_str(model::TinyTransformer) =
+    occursin("CuArray", string(typeof(model.tok_emb.weight))) ? "GPU (CuArray)" : "CPU (Array)"
+
 function InnerLM(dir::String; cfg::LMConfig=LMConfig())
     isdir(dir) || mkpath(dir)
     paths = _lm_paths(dir)
@@ -249,7 +290,8 @@ function InnerLM(dir::String; cfg::LMConfig=LMConfig())
             loaded_cfg = lmconfig_from_dict(JSON3.read(read(paths.config, String)))
             model = TinyTransformer(loaded_cfg)
             state = BSON.load(paths.weights)[:model_state]
-            Flux.loadmodel!(model, state)
+            Flux.loadmodel!(model, state)   # завантажуємо на CPU-моделі (BSON завжди зберігає CPU-стан), переносимо на пристрій нижче
+            model = _to_device(model)
             meta = if isfile(paths.meta)
                 d = JSON3.read(read(paths.meta, String))
                 LMMetadata(
@@ -262,7 +304,7 @@ function InnerLM(dir::String; cfg::LMConfig=LMConfig())
                 LMMetadata()
             end
             opt_state = Flux.setup(Flux.Adam(3.0f-4), model)
-            println("  [LM] Внутрішня модель завантажена. Флешів натреновано: $(meta.total_flashes_trained), останній loss: $(round(meta.last_loss, digits=3)).")
+            println("  [LM] Внутрішня модель завантажена. Флешів натреновано: $(meta.total_flashes_trained), останній loss: $(round(meta.last_loss, digits=3)). Пристрій: $(_lm_device_str(model)).")
             return InnerLM(model, opt_state, loaded_cfg, meta, dir)
         catch e
             @warn "[LM] Не вдалось завантажити наявну модель, ініціалізується нова" exception=(e, catch_backtrace())
@@ -270,8 +312,10 @@ function InnerLM(dir::String; cfg::LMConfig=LMConfig())
     end
 
     model = TinyTransformer(cfg)
+    n_params = _lm_param_count(model)   # рахуємо ДО переносу на пристрій — destructure на CPU-моделі найпростіше
+    model = _to_device(model)
     opt_state = Flux.setup(Flux.Adam(3.0f-4), model)
-    println("  [LM] Нова внутрішня мовна модель. Параметрів: $(_lm_param_count(model)).")
+    println("  [LM] Нова внутрішня мовна модель. Параметрів: $(n_params). Пристрій: $(_lm_device_str(model)).")
     InnerLM(model, opt_state, cfg, LMMetadata(), dir)
 end
 
@@ -279,7 +323,7 @@ function lm_save!(lm::InnerLM)
     paths = _lm_paths(lm.dir)
     isdir(lm.dir) || mkpath(lm.dir)
 
-    state = Flux.state(lm.model)
+    state = Flux.state(cpu(lm.model))   # BSON не серіалізує CuArray надійно — завжди пишемо CPU-стан, незалежно від того, де тренувались
     tmp = paths.weights * ".tmp"
     BSON.bson(tmp, Dict(:model_state => state))
     mv(tmp, paths.weights; force=true)
@@ -320,8 +364,8 @@ function lm_learn!(lm::InnerLM, text::AbstractString)::Union{Float64,Nothing}
         ids_full = ids_full[(end - bs):end]
     end
 
-    input_ids  = reshape(ids_full[1:end-1], :, 1)   # (T, 1)
-    target_ids = ids_full[2:end]                     # (T,)
+    input_ids  = _to_device(reshape(ids_full[1:end-1], :, 1))   # (T, 1)
+    target_ids = _to_device(ids_full[2:end])                     # (T,)
 
     result = Flux.withgradient(lm.model) do m
         logits = m(input_ids)                         # (vocab, T, 1)
@@ -356,9 +400,9 @@ function lm_generate(lm::InnerLM, prompt::AbstractString; max_new_bytes::Int=100
     bs = lm.cfg.block_size
     for _ in 1:max_new_bytes
         ctx = length(ids) > bs ? ids[(end - bs + 1):end] : ids
-        input_ids = reshape(ctx, :, 1)
+        input_ids = _to_device(reshape(ctx, :, 1))
         logits = lm.model(input_ids)
-        last_logits = logits[:, end, 1] ./ Float32(temperature)
+        last_logits = Array(logits[:, end, 1]) ./ Float32(temperature)   # назад на CPU: _sample_from_probs скалярно індексує, на GPU це заборонено
         probs = Flux.softmax(last_logits)
         push!(ids, _sample_from_probs(probs))
     end
