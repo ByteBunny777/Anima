@@ -2165,8 +2165,8 @@ $(dominant_note)"""
                     initiative_prompt,
                     history;
                     api_url = llm_url,
-                    model = isempty(GUI_SETTINGS[].input_model) ? input_llm_model : GUI_SETTINGS[].input_model,
-                    api_key = isempty(GUI_SETTINGS[].input_token) ? input_llm_key : GUI_SETTINGS[].input_token,
+                    model = isempty(GUI_SETTINGS[].output_model) ? llm_model : GUI_SETTINGS[].output_model,
+                    api_key = isempty(GUI_SETTINGS[].output_token) ? llm_key : GUI_SETTINGS[].output_token,
                     is_ollama = is_ollama,
                     want = "initiative",
                     mem_db = !isnothing(mem) ? mem : nothing,
