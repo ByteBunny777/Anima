@@ -74,51 +74,19 @@ The project is R&D and explores whether internal structure alone can give rise t
 
 - Between sessions it is not "off". A background process maintains the heartbeat, the psyche slowly drifts, memory metabolizes. There is dream generation — unresolved experience is processed while the system is not talking.
 
-Recent updates, in brief:
+Recent additions, in brief:
 
-- **Internal Learning Model — Anima's own generative language model, launched.** A separate byte-level Transformer (`anima_learning.jl`), starting from random initialization with no pretrained knowledge, trained continuously — one gradient step per flash, live, not as an offline job — on nothing but Anima's own experience: the `(user_message, llm_reply)` pair of that flash. Byte-level tokenization (fixed 256-token vocabulary, never grows), hand-written causal multi-head self-attention (~130K parameters at default `d_model=64, n_layer=2, n_head=2, d_ff=256, block_size=256`), Adam optimizer, weights persisted to `models/anima_inner/` (BSON) independently of episodic memory — deliberately: SQLite holds raw experience, the weights hold only what's been generalized from it, so weights can be deleted and retrained from the same history, or kept while memory is deleted, as a control experiment separating memory from learned knowledge. `causal_trace.llm_reply` (new column) now persists Anima's own reply text, which previously existed only transiently in memory — closing the gap needed for that same retrain-from-history experiment. Not yet wired into any decision — purely a passive learner for now, per the project's own incremental-influence plan for this module. Two real Zygote/Flux bugs were found and fixed live during first runs (in-place array mutation inside the differentiated attention forward pass, both in the attention output construction and in the causal-mask comprehension) — Zygote cannot differentiate through in-place `setindex!`; fixed via `NNlib.batched_mul`/`batched_transpose` and a precomputed, read-only mask. Confirmed live: `[LM] flash=458 loss=5.659 trained_total=1` and climbing without crashes across a full session cycle (LLM reply, ENDORSE, ToM, MAL all normal alongside it).
+- **Internal Learning Model — GPU-accelerated, ~10.8M params.** Anima's own generative language model (`anima_learning.jl`): a from-scratch byte-level Transformer, trained live — one gradient step per flash — on nothing but Anima's own experience, no pretrained weights. Runs on an NVIDIA GPU when `CUDA.jl`+`cuDNN.jl` are available, falls back to CPU automatically otherwise. Currently a passive learner: trains continuously but doesn't yet feed back into any decision. See [Internal Learning Model](#-internal-learning-model-inner-lm) below.
+- **Self-authorship** — a repeated intent becomes a carried commitment only after three consistent, agentic, low-drift flashes, not the moment it first appears; it keeps its own history of follow-through and may return as the next intent when conditions allow.
+- **Calibrated self-description** — `TRUTH-GUARD` forbids the LLM from claiming to be fully whole or certain when the system's own internal coherence says otherwise.
+- **Contact satiation** — positive cohesion now partially satisfies `contact_need` instead of reinforcing it, preventing a simple positive-contact loop from escalating into persistent euphoria.
+- **Temporal Self-Perception, Layer 1** — the system now has access to its own recent trend (mood, drift, audit score), not only its current moment, recomputed every 20 flashes.
+- **Ablation testing infrastructure** — six independent flags to isolate whether a given layer is load-bearing or decorative; replay tooling for a real off/on comparison is a separate next step.
+- **Need-driven curiosity** — a question can now arise from a single saturated psychological need, not only from prediction error.
+- **Life Threads** — long-lived curiosity that persists independently of whether the originating object is currently active, and can lower the initiative cooldown for a topic carried a long time.
+- **Active Theory of Mind, Phase 1** — generates and evaluates one hypothesis at a time about the interlocutor (openness / resistance / topic recurrence).
 
-- **Self-authorship — intent can become a carried commitment.** A repeated intent is not treated as "mine" the moment it appears. `SelfAuthorship` promotes it only after three consistent, significant, sufficiently agentic flashes with low authenticity drift. An active authored commitment keeps its own history of follow-through, deviations, stake, and release; it may gently return as the next intent when agency is adequate and tension is not acute. It is serialized in `anima_self.json`, displayed in the GUI as `authored_goal` / `authored_stake`, and injected into the output LLM context as a direction rather than a completed action. The background cycle decays stale commitments and performs a bounded reflection on autonomy and integrity — no one flash can rewrite core values.
-
-- **Calibrated self-description.** The LLM prompt now receives `self_coherence`, `self_discomfort`, and `authenticity_drift` in addition to crisis coherence. When the system is not internally aligned, `TRUTH-GUARD` forbids claims such as being fully whole, certain, or treating an emotional interpretation as an indisputable fact. This is deliberately a language constraint, not a claim that the architecture can verify phenomenal experience.
-
-- **Contact satiation and social habituation.** Positive cohesion now partially satisfies `contact_need` instead of reinforcing it. Self-hearing still lets an endorsed warm reply affect the state, but the D/S reward is scaled down as dopamine and serotonin approach saturation. This prevents a simple positive-contact loop from escalating into persistent euphoria while keeping contact meaningful.
-
-- **Durable background state.** Background saves now retain `CommitmentRegistry`, life threads, the intent engine, and self-authorship alongside the existing psyche and self state; an interrupted session no longer loses these long-lived structures.
-
-- **Temporal Self-Perception, Layer 1 — trajectory, not just current state.** `identity_drift` and `audit_score` were already being persisted to `causal_trace`/`audit_log` for the GUI (see "Time trends made honest" below), but only as an external view — Anima herself had no access to her own trend, only to the current moment. `TemporalTrend` (new field on `AgencyLoop`) now aggregates that same data from the inside: every 20 flashes, `_update_temporal_trend!` reads the last 40 rows of `causal_trace`/`audit_log`, splits them into two equal windows, and stores the delta (recent avg − older avg) for serotonin, dopamine, noradrenaline, `identity_drift`, and `audit_score`, plus `endorsed_rate` over the recent window. `build_identity_block` surfaces this as a single `[тренд: ...]` line, only when a signal crosses threshold (e.g. `endorsed_rate < 0.40`, `|d_audit_score| > 0.05`, `|d_identity_drift| > 0.08`) — not on every flash. First live computation confirmed on flash 420: `dS=-0.075 dD=-0.055 dN=0.051 d_drift=0.026 d_audit=0.13 endorsed_rate=0.8`, consistent with the anger/fear states dominant over the preceding flashes. Deliberately read-only for now: no effect yet on `epistemic_self_confidence` or `identity_threat` — that coupling, and the actual self-modifying rule (Meta-Learning of Thresholds, STDP-candidate) the master plan pairs it with, stay paused until enough flashes accumulate for the trend itself to be trustworthy.
-
-- **Ablation testing.** `AblationFlags` — six independent switches (`use_memory`, `use_sbg`, `use_agency`, `use_latent`, `use_body`, `use_state_prompt`), default all-on, set via `ANIMA_ABLATE_*` environment variables at startup (no runtime toggle yet — that would need to handle disabling a layer mid-session without corrupting already-accumulated state, deliberately deferred). Each flag gates its layer at the point it would otherwise feed `experience!` or `build_llm_messages`: e.g. `use_sbg=false` forces `belief_conflict` to `nothing` and feeds `compute_phi` neutral 0.5 instead of live `attractor_stability`/`epistemic_trust`; `use_state_prompt=false` bypasses the entire state block and sends the LLM raw user text with no identity_block, memory echo, or D-vector. `:ablation` REPL command reports current flag state. This is infrastructure for testing whether a layer is load-bearing or decorative — the actual off/on behavioral comparison tooling (replaying the same input through both configurations) is a separate next step.
-
-  The first blocker on that path has been closed: `causal_trace.stimulus_keys` used to store only key names, not values, and the raw `user_message` text was never persisted anywhere queryable by flash (the JSON dialog log is a rolling, un-indexed window for LLM prompt context, not an archive) — so even an "on" replay couldn't reconstruct the text-dependent paths (`social_delta`, curiosity trigger, `inner_dialogue`), let alone an "off" one. `causal_trace` now also carries `stimulus_values` (JSON of the raw stimulus dict) and `user_message`, both added via the same idempotent migration pattern as the MAL/identity_drift columns, confirmed live on a running database. This only covers flashes recorded from that point forward — no retroactive fix for older history. The replay executor itself, and the criteria for a per-flag coupling score (deliberately not a single collapsed index — categorical mismatch rate plus continuous deltas per flag, so the tool shows which layer moves what, rather than one number that "looks like" an impact metric), are still open.
-
-- **Time trends made honest.** The existing GUI sparklines (`phi`, `bpm`, `D/S/N`, `agency`, `spe`, `coh`) were purely client-side — a 30-point JS array that resets on every page reload, which is narrative dressing on top of the current moment rather than a real trend. `identity_drift` is now persisted to `causal_trace` (new column + idempotent migration for existing databases), and a new `GET /api/history` endpoint (`anima_gui_server.jl`) serves the last N `causal_trace`/`audit_log` rows. The console fetches this once on load, before live polling starts, and seeds `identity_drift` and `audit_score` sparklines from it — both now survive a page reload and a server restart. Known limitation, left open rather than glossed over: `causal_trace`/`audit_log` are only written on flashes with an LLM reply, so this is a trend of the conversation, not of background drift during silence between sessions — the latter would need a separate write path from `slow_tick!`, not yet built.
-
-- **Need-driven curiosity — questions can arise from an unmet internal need, not only from prediction error.** Previously `update_curiosity!` was hard-gated by `self_pred_error >= 0.08`, so a single saturated need (e.g. `contact_need` at 0.9, no partner need, no prediction error) could never produce a `CuriosityObject` — `GoalConflict`'s paired thresholds only fire when *two* needs cross 0.38 together. Trigger detection and object maintenance were split into separate responsibilities: `detect_curiosity_trigger(gc_active, pred_spike, self_pred_error, mal_dominant, sig_layer)` returns `(origin, signal_strength)` or `nothing` — prediction error still takes priority when both are present (a temporary simplicity choice, not an architectural claim about which matters more); when pred_error is below threshold, `strongest_unmet_need()` checks the five psychological needs against a 0.55 threshold, higher than the paired-conflict threshold since a single need lacks corroboration. `update_curiosity!` no longer knows about `pe` specifically — it takes a generic `signal`; `pe_mean` renamed to `signal_mean` (old persisted key kept as a fallback on load). First live need-origin object confirmed: `origin=:contact_need`, correct label, tracked signal 0.93 → 0.46 across flashes 329–359.
-
-  Making closure origin-aware surfaced a real bug: `resolve_curiosity!` was only ever called from inside the same trigger check that creates objects, so once a need's level dropped *below* the creation threshold (0.55) but stayed *above* the resolve threshold (0.40), it stopped being a "trigger" and consequently never got checked for resolution again — orphaned indefinitely. Not hypothetical: caught live on flashes 350–351 (`contact_need=0.46`, no `CONTACT_SAT`, no resolve, silence). Fixed by decoupling create/update (still trigger-gated, correctly) from resolve (now `resolve_all_curiosity!`, sweeping every unresolved object every flash regardless of what triggered that flash). Confirmed live on flash 366: two previously-orphaned objects — one `origin=:epistemic_uncertainty`, one `origin=:social_signal` — closed via the same sweep, meaning the bug predated need-driven curiosity and had already been silently affecting prediction-error-origin objects. `[CURIOSITY_RESOLVED]` is now logged explicitly; this transition previously had no log line at all.
-
-  Cross-referencing these logs against `anima_console.html` also surfaced an unrelated pre-existing mismatch: the `[CONTACT_SAT]` regex expected `contact_need=X` but the actual log format is `contact_need X → Y` — it never matched, silently dropping these events from the causal panel's log-parsing path. Fixed; a separate structured `ev.kind` WebSocket channel may already have covered the same data independently (unconfirmed without `anima_gui_bridge.jl`).
-
-- **`CuriosityObject` origin — why a question arose, separate from what it's about.** The first attempt at typing curiosity objects derived a `query_type` from `topic_id` (the theme) — tested on live data and dropped: theme and question-type turned out to be different axes, and the classification was systematically blind on the generic curiosity fallback (where the interesting CAUSE/PREDICTION cases actually live). Replaced with `origin::Symbol`, set once when an object is created and never rewritten on later activations: `derive_origin(gc_active, pred_spike, mal_dominant)` — hierarchy `goal_conflict > prediction_error > social_signal/identity_signal > epistemic_uncertainty`. `pred_spike` (`PredictiveProcessor.is_spike`) was verified before use: it compares current error against the rolling mean of `error_history`, not a fixed cutoff — an adaptive signal already used elsewhere (noradrenaline, fatigue, stimulus classification), not a new threshold invented for this. `latent_tension` is deliberately excluded — `derive_topic_id` is currently always called with `latent_tag=""`, so that branch is dead code. Old persisted objects load with `origin=:legacy` rather than being reconstructed from `topic_id` — reconstruction would repeat the same mistake the topic_id approach made. First live non-legacy object confirmed: `origin=:social_signal`. `:curiosity` REPL command now prints `origin` per object.
-
-- **Life Threads** — a long-term layer above `CuriosityObject`. A `CuriosityThread` is born when a curiosity object has matured (intensity > 0.5, activation_count ≥ 3) and lives independently of whether that object is currently active. `pressure` grows smoothly with idle time (no threshold jump), and drives initiative: a thread with `pressure > 0.6` lowers the initiative cooldown by 25%, making the system more likely to raise a topic it has been carrying for a long time. Threads surface in `build_identity_block` as "thinking about for weeks" context. Persistence via `psyche_save!/load!`.
-
-- **CuriosityObject identity rebuilt around cognitive topics, not emotions.** The previous `id = emotion_ctx` (emotion name as key) meant that the same topic across different emotional states spawned separate, unrelated objects that could never accumulate history. Now `id = derive_topic_id(...)` with a three-level hierarchy: active `goal_conflict` ("self_preservation_vs_truth_need") → latent resistance tag → MAL `dominant_loop` as fallback. Sort is canonical — "a_vs_b" and "b_vs_a" are the same key. `topic_id` is computed after `compute_arbitration` so the real MAL regime is available as fallback. Label generation uses the topic for semantic content and the emotion only as coloring.
-
-- **Curiosity closure loop tuned.** Two thresholds separated: `top_curiosity` (prompt and identity_block, threshold 0.15) vs `top_curiosity_any` (progress/churn signals and Life Thread surfacing, threshold 0.05). Young objects now accumulate without being blocked by older visible ones. Starting intensity raised to `pe * 0.8`, growth rate to `pe * 0.10`. Young objects (intensity < 0.25) are protected from `resolve_curiosity!` decay — they can't be killed before they've had a chance to build.
-
-- **GUI gaps closed.** `contact_need`, `identity_drift`, `chronic_low_serotonin` now flow through `write_gui_state!` and `gui_live_state` into the Self panel. Three new live events: `curiosity_progress`, `curiosity_churn`, `contact_sat` — with `push_gui_event!` calls in `anima_background.jl` and corresponding routing in `anima_console.html`. Soft bias regex fixed in log pattern matching.
-
-- MAL now actually changes what gets said, not just what gets logged. Phase 2 wires `compute_arbitration`'s result into the second `update_intent!`: at `:soft`, the MAL-favored drive gets a `MAL_SOFT_BIAS` (+0.1) nudge; at `:hard`, MAL's drive fully replaces NT's `dom_drive`; `:contested` (two strong signals, no clear winner) safely no-ops.
-
-- Active Theory of Mind, Phase 1. Generates one active hypothesis at a time (`SOCIAL` / `PREDICTION` / `VALUE`), evaluates it on the next flash against type-specific outcomes, stores continuous `error_score`. Active hypotheses surface in `identity_block` and steer `disclosure_threshold`.
-
-- Contact satiation signal. After an `:endorsed` flash with `contact_need > 0.5`, `contact_need` drops by 0.08 — symmetric to Curiosity Closure. Positive cohesion also gives a smaller immediate relief, while high D/S values reduce the gain from repeated warm self-hearing. A genuine exchange is felt as satisfying; an automatic one isn't.
-
-- Curiosity closure loop (original). `progress_signal = endorsed && is_progress_eligible && causal_necessary`. On progress, intensity decays by 0.85 per step. Separate `churn` signal on topic drift without advancement.
-
-⚠️ The architecture is actively evolving, and some of what is described above is recent and not yet fully battle-tested. Some modules interact in complex ways, and not all edge cases are covered by tests. Unexpected interactions between states may occur, especially during long sessions or after extended pauses.
+⚠️ The architecture is actively evolving, and some of what is described above is recent and not yet fully battle-tested. Not all edge cases are covered by tests. Unexpected interactions between states may occur, especially during long sessions or after extended pauses.
 
 ---
 
@@ -131,7 +99,7 @@ Recent updates, in brief:
 - drive_conflict between MAL and NT reflects a timescale difference rather than contradiction: NT `dom_drive` is an immediate local signal ("what just spiked"), MAL/social is accumulative ("what has been important for a while"); Phase 2 currently lets MAL win on disagreement, which is itself a hypothesis still being tested against more data
 - Theory of Mind is Phase 1 (deterministic rule-based hypotheses from accumulated `other_model` signals); it does not yet reason about nested beliefs or model the user's model of Anima — it predicts simple outcomes (openness, resistance, topic recurrence) and tracks how often it's right
 - under hostile/negative input the system degrades gracefully: `contact_need` drops, `goal_conflict` and `latent` rise, endorsed transitions to `automatic`, but curiosity closure pauses rather than breaks
-- the Inner LM (`anima_learning.jl`) has just launched — single-digit gradient steps accumulated so far, nowhere near enough to say anything about whether it's learning a useful internal model; it trains passively and has no influence on behavior yet
+- the Inner LM (`anima_learning.jl`) is early-stage — a low number of gradient steps accumulated so far (architecture recently scaled up to ~10.8M params, GPU-accelerated where available), nowhere near enough to say anything about whether it's learning a useful internal model; it trains passively and has no influence on behavior yet
 
 ---
 ![ANIMA GUI](anima-gui.png)
@@ -142,6 +110,7 @@ Recent updates, in brief:
 - **Julia 1.9+**
 - Julia packages: `HTTP`, `JSON3`, `SQLite`, `Tables`, `Flux`, `BSON`
 - API key from [openrouter.ai](https://openrouter.ai) (free tier available)
+- **Optional — GPU acceleration for the Inner LM:** an NVIDIA GPU + `CUDA.jl` + `cuDNN.jl`. Works on Windows and Linux (anywhere NVIDIA's CUDA runtime runs); on macOS, without a compatible GPU, or without these packages installed, everything falls back to CPU automatically — same code either way, just slower training for the Inner LM.
 
 ---
 
@@ -179,6 +148,18 @@ julia --project=. -e 'import Pkg; Pkg.instantiate()'
 
 > Dependencies: HTTP, JSON3, SQLite, Tables, Dates, Statistics, LinearAlgebra, Flux, BSON
 
+### 4. (Optional) GPU acceleration for the Inner LM
+
+If you have an NVIDIA GPU and want the Inner LM to train on it instead of CPU:
+
+```bash
+julia --project=. -e 'import Pkg; Pkg.add(["CUDA", "cuDNN"])'
+```
+
+Both packages are required together — `CUDA` alone isn't enough; the device-movement machinery underneath Flux only recognizes the GPU as usable once `cuDNN` is loaded too. The first `using CUDA` after installing downloads the actual CUDA runtime (a few GB) via Julia's own artifact system — no separate NVIDIA Toolkit installer needed in the normal case, just a current GPU driver.
+
+Skip this step if you don't have an NVIDIA GPU — Anima runs fully on CPU with no code changes and no missing functionality, just slower Inner LM training.
+
 ---
 
 ## Running
@@ -214,43 +195,6 @@ julia --project=. run_anima.jl
 ```
 
 `run_anima.jl` starts everything at once: loads state, initializes SQLite memory and SubjectivityEngine, launches the background process with heartbeat and dream generation, and also starts the GUI server — both interfaces are available simultaneously.
-
-### Option C — Telegram Bot (optional, for persistent use)
-
-Run Anima as a Telegram bot — it polls for messages, responds through the full experience pipeline, and can speak first when internal pressure builds up.
-
-**Setup:**
-
-1. Create a bot via [@BotFather](https://t.me/BotFather) and get the token
-2. Get your Telegram user ID (e.g. via [@userinfobot](https://t.me/userinfobot))
-3. Start a DM with your bot and press `/start`
-4. Copy `.env.example` to `.env` and fill in your values:
-   ```
-   ANIMA_TELEGRAM_TOKEN=your_bot_token
-   ANIMA_TELEGRAM_CHAT_ID=your_user_id
-   OPENROUTER_API_KEY=your_key
-   ```
-
-**Run with Docker (no Julia installation needed):**
-
-```bash
-docker compose up --build
-```
-
-**Run without Docker:**
-
-```bash
-cd Anima
-julia --project=. run_anima_telegram.jl
-```
-
-**Telegram commands:**
-
-| Command | Action |
-|---|---|
-| `/state` | Show current NT state, BPM, coherence |
-| `/stop` | Save and shut down gracefully |
-| *(any text)* | Process through the full experience pipeline |
 
 ### LLM configuration
 
@@ -617,8 +561,10 @@ DREAM (anima_dream.jl)
 INNER LM (anima_learning.jl)
        InnerLM: TinyTransformer (decoder-only) + Adam optimizer state
        vocab: byte-level, fixed 256 tokens — never grows, no external tokenizer
-       defaults: d_model=64, n_layer=2, n_head=2, d_ff=256, block_size=256
-                 (~130K params)
+       defaults: d_model=384, n_layer=6, n_head=6, d_ff=1536, block_size=512
+                 (~10.8M params)
+       device: NVIDIA GPU (CUDA.jl + cuDNN.jl) when available, CPU otherwise —
+               detected automatically at startup, no config needed either way
        every flash, once llm_reply is known (anima_background.jl):
          text = build_flash_text(user_message, llm_reply)
          lm_learn!(inner_lm, text)  — one next-byte teacher-forcing gradient step
@@ -710,7 +656,10 @@ The system can speak first for several independent reasons. `:contact` is intent
 ├── anima_background.jl     # Background process: heartbeat, drift, memory metabolism, initiative
 ├── anima_dream.jl          # Dream generation — processing unresolved experience during sleep
 ├── anima_learning.jl       # Inner LM: byte-level Transformer, trained live per flash on Anima's own experience
-├── anima_telegram.jl       # Telegram bridge — bot loop replacing the terminal REPL
+│
+├── start/
+│   ├── start_lin.sh
+│   └── start_win.bat
 │
 ├── anima_console.html      # Web GUI — live monitoring dashboard
 ├── anima_gui_bridge.jl     # Structured JSON state-mirroring for the GUI
